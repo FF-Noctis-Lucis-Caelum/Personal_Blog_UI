@@ -1,25 +1,43 @@
 {
-  "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-    "target": "ES2022",
-    "lib": ["ES2023"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
-  },
-  "include": ["vite.config.ts"]
+    "compilerOptions": {
+        /* 启用复合项目模式（允许被应用配置引用） */
+        "composite": true,
+        /* Node环境输出目录（存放Node相关类型声明） */
+        "outDir": "./dist-node-types",
+        /* Node源码根目录（如vite.config.ts所在目录） */
+        "rootDir": ".",
+        /* TS编译缓存文件（加速Vite配置的编译） */
+        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+        /* 目标JS版本（兼容Node.js 14+） */
+        "target": "ES2022",
+        /* 包含的标准库（Node环境不需要DOM） */
+        "lib": [
+            "ES2023"
+        ],
+        /* 模块系统（ESNext，支持最新模块特性） */
+        "module": "ESNext",
+        /* 跳过库类型检查（加速编译，第三方库类型由其自身保证） */
+        "skipLibCheck": true,
+        /* 模块解析方式（Bundler模式，适合构建工具配置） */
+        "moduleResolution": "bundler",
+        /* 允许导入TS文件时省略扩展名（如import './config.ts'可简写为'./config'） */
+        "allowImportingTsExtensions": true,
+        /* 严格的模块语法（禁止import = require等混合语法） */
+        "verbatimModuleSyntax": true,
+        /* 强制模块检测（避免意外全局变量） */
+        "moduleDetection": "force",
+        /* 允许生成输出文件（生成Node相关类型声明） */
+        "noEmit": false,
+        /* Linting */
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "erasableSyntaxOnly": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedSideEffectImports": true
+    },
+    /* Node环境包含的文件（仅Vite配置文件，避免混入应用代码） */
+    "include": [
+        "vite.config.ts"
+    ]
 }

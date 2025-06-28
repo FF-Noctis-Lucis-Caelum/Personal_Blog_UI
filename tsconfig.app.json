@@ -1,15 +1,28 @@
 {
-  "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
-  },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+    "extends": "@vue/tsconfig/tsconfig.dom.json",
+    "compilerOptions": {
+        /* 启用复合项目模式（允许被主项目引用，生成tsbuildinfo缓存） */
+        "composite": true,
+        /* 允许生成输出文件（与主配置的declaration配合生成.d.ts） */
+        "noEmit": false,
+        /* 应用代码输出目录（与Vite构建目录区分，仅用于类型声明） */
+        "outDir": "./dist-app-types",
+        /* 应用代码源文件根目录（明确src为源码根目录） */
+        "rootDir": "./src",
+        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+        /* Linting */
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "erasableSyntaxOnly": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedSideEffectImports": true
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "src/**/*.vue"
+    ],
+    /* 引用Node环境配置（如需要在应用中使用Node API时依赖） */
+    "references": [{ "path": "./tsconfig.node.json" }]
 }

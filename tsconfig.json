@@ -1,46 +1,71 @@
 {
     "compilerOptions": {
-        "target": "ES2020",
-        "module": "ES2020",
-        "moduleResolution": "node",
+
+        /* 类型检查严格模式（强制类型声明、禁止any隐式转换等） */
         "strict": true,
+        /* 禁止未使用的局部变量（减少代码冗余） */
+        "noUnusedLocals": true,
+        /* 禁止未使用的函数参数（减少代码冗余） */
+        "noUnusedParameters": true,
+        /* 禁止switch语句中case穿透（增强代码安全性） */
+        "noFallthroughCasesInSwitch": true,
+        /* 禁止未检查的副作用导入（如导入仅执行副作用的模块） */
+        "noUncheckedSideEffectImports": true,
+
+        /* 目标JS版本（兼容现代浏览器） */
+        "target": "ES2020",
+        /* 模块系统（ES模块，支持import/export） */
+        "module": "ES2020",
+        /* 模块解析方式（Node.js风格，兼容CommonJS和ES模块） */
+        "moduleResolution": "node",
+        /* 保留JSX语法（Vue单文件组件中使用JSX时需要） */
         "jsx": "preserve",
+        /* 允许导入JS文件（兼容现有JS代码） */
         "allowJs": true,
+        /* 生成源映射文件（便于调试） */
         "sourceMap": true,
+        /* 允许导入JSON文件（如配置文件） */
         "resolveJsonModule": true,
+        /* 启用ES模块与CommonJS互操作（兼容第三方库） */
         "esModuleInterop": true,
+        /* 基础路径（用于路径别名解析） */
         "baseUrl": ".",
-        "types": [
-            "vite/client",
-            "node"
-        ],
+        /* 额外类型定义（Vite客户端类型、Node.js类型） */
+        "types": ["vite/client", "node"],
+
+        /* 类型声明文件输出目录（与Vue-TSC生成路径保持一致） */
+        "outDir": "./dist-types",
+        /* 根目录设置 */
+        "rootDir": "./src",
+        "skipLibCheck": true,
+        /* 启用类型声明生成（生成.d.ts文件） */
+        "declaration": true,
+        /* 类型声明文件存放目录（与outDir一致，避免混淆） */
+        "declarationDir": "./dist-types",
+
+        /* 路径别名配置（与Vite别名保持一致，避免导入路径错误） */
         "paths": {
-            "@/*": [
-                "src/*"
-            ],
-            "@assets/*": [
-                "src/assets/*"
-            ],
-            "@components/*": [
-                "src/components/*"
-            ],
-            "@views/*": [
-                "src/views/*"
-            ],
-            "@store/*": [
-                "src/stores/*"
-            ]
+            /* @/ 指向src目录 */
+            "@/*": ["src/*"],
+            /* 资产文件别名 */
+            "@assets/*": ["src/assets/*"],
+            /* 组件别名 */
+            "@components/*": ["src/components/*"],
+            /* 页面视图别名 */
+            "@views/*": ["src/views/*"],
+            /* 状态管理别名 */
+            "@store/*": ["src/stores/*"]
         },
-        "lib": [
-            "es2020",
-            "dom"
-        ]
+
+        /* 包含的标准库（ES2020语法+DOM API） */
+        "lib": ["es2020", "dom"]
     },
-    "include": [
-        "src/**/*",
-        "src/**/*.vue"
-    ],
-    "files": [],
+
+    /* 需要编译的文件（src目录下所有TS、Vue文件） */
+    "include": ["src/**/*", "src/**/*.vue"],
+    /* 排除的文件（依赖、构建产物、类型声明目录，避免重复编译） */
+    "exclude": ["node_modules", "dist", "dist-app-types", "**/dist-app-types/**/*" ],
+    /* 移除子项目引用（避免循环依赖，由子配置主动引用主配置） */
     "references": [
         {
             "path": "./tsconfig.app.json"
