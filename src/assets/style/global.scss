@@ -1,0 +1,214 @@
+// 字体
+@import url('https://fonts.googleapis.com/css?family=Josefin+Sans:400,700|Playfair+Display') ;
+
+// 绝对定位
+@mixin Absolute($left: 0, $top: 0, $bottom: unset, $right: unset) {
+    position: absolute;
+    top: $top;
+    left: $left;
+    right: $right;
+    bottom: $bottom;
+}
+
+@mixin Attach($url) {
+    background-image: url($url);
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: repeat;
+    background-size: cover;
+}
+
+// 相对定位
+@mixin Relative($left: unset, $top: unset) {
+    position: relative;
+    left: $left;
+    top: $top;
+}
+
+// 固定定位
+@mixin Fixed($left: 0, $top: 0, $bottom: unset, $right: unset) {
+    position: fixed;
+    top: $top;
+    left: $left;
+    right: $right;
+    bottom: $bottom;
+}
+
+// 弹性盒
+@mixin Flex($direction: row, $justify: center, $align: center){
+    display: flex;
+    flex-direction: $direction;
+    justify-content: $justify;
+    align-items: $align;
+}
+
+// 网格 （规则）
+@mixin Grid($x: 1, $y: 1, $gap: 0, $width: 100%, $height: 100%) {
+    display: grid;
+    grid-template-columns: repeat($x, $width);
+    grid-template-rows: repeat($y, $height);
+    grid-gap: $gap;
+}
+
+// 网格 （不规则）
+@mixin Grid_M($x: unset, $y: unset, $gap: 0) {
+    display: grid;
+    grid-template-columns: $x;
+    grid-template-rows: $y;
+    grid-gap: $gap;
+}
+
+// 基本变换
+@mixin TransForm($x: 50%, $y: 50%, $scaleX: 1, $scaleY: 1, $opacity: 1) {
+    transform-origin: $x $y;
+    opacity: $opacity;
+    transform: scaleY($scaleX) scaleX($scaleY);
+}
+
+// 字体设置
+@mixin Font($size: 14px, $weight: 800, $color: black, $align: center) {
+    font-size: $size;
+    font-weight: $weight;
+    color: $color;
+    text-align: $align;
+}
+
+// 宽高设置
+@mixin BoxSize($width, $height) {
+    width: $width;
+    height: $height;
+    line-height: $height;
+}
+
+// 边距设置
+@mixin Padding($padding: 0) {
+    padding: $padding;
+}
+
+// 背景图片的基础用法
+@mixin Back($img) {
+    background-image: url($img);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+// 背景图片的详细用法
+@mixin Back_Make($img, $px: 50%, $py: 100%, $s1: 100%, $s2: auto) {
+    background-image: url($img);
+    background-size: $s1 $s2;
+    background-position: $px $py;
+    background-repeat: no-repeat;
+}
+
+// 背景渐变
+@mixin Back_Grad($gradient) {
+    background-image: $gradient;
+}
+
+// 背景颜色
+@mixin Back_C($color) {
+    background: $color;
+}
+
+// 限制元素最小尺寸
+@mixin MHLimit($width: 300px, $height: 400px) {
+    min-width: $width;
+    min-height: $height;
+}
+
+// 限制元素最大尺寸
+@mixin HMLimit($width: 300px, $height: 400px) {
+    max-width: $width;
+    max-height: $height;
+}
+
+// 开启磨砂效果
+@mixin Blur($blur: 10px) {
+    backdrop-filter: blur($blur);
+    -webkit-backdrop-filter: blur($blur);
+}
+
+// 开启文本折叠
+@mixin TextOverflow() {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap; /* 防止文本换行 */
+}
+
+@mixin reload {
+    /* 去除边框 */
+    border: none;
+    outline: none; /* 移除聚焦时的轮廓线 */
+
+    /* 重置内边距 */
+    padding: 0;
+
+    /* 重置字体样式 */
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+
+    /* 重置滚动条样式 */
+    overflow: auto; /* 或 hidden 隐藏滚动条 */
+    resize: none; /* 禁止拖动调整大小 */
+
+    /* 浏览器私有前缀重置 */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+
+    /* 背景色重置 */
+    background-color: transparent;
+
+    /* 盒模型重置 */
+    box-sizing: border-box;
+    margin: 0;
+
+    /* 去除边框和轮廓线 */
+    overflow-y: hidden; /* 始终隐藏垂直滚动条 */
+
+    /* 去除浏览器默认样式 */
+
+    /* 滚动条隐藏（兼容WebKit内核浏览器） */
+    &::-webkit-scrollbar {
+        display: none;
+    }
+    position: relative;
+    line-height: inherit;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+@mixin ImgSet($size: 30px, $url) {
+    width: $size;
+    height: $size;
+    background-image: url($url);
+    background-position: center center;
+    background-size: cover;
+    background-repeat: no-repeat;
+}
+
+@mixin SizeSet($width: 100%, $height: 100%) {
+    width: $width;
+    height: $height;
+}
+
+@mixin FlexSet($direction: row, $justify: center, $align: center) {
+    display: flex;
+    flex-direction: $direction;
+    justify-content: $justify;
+    align-items: $align;
+}
+
+@mixin ColorSet($color: #fff) {
+    color: $color;
+}
+
+@mixin BorderSet($border: 1px solid #fff) {
+    border: $border;
+}
+
+@mixin PaddingSet($padding: 0 0 0 0) {
+    padding: $padding;
+}

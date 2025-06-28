@@ -1,0 +1,22 @@
+{
+  "reactorTemperatureRecords": [
+    {
+      "timestamp": "2023-10-01 08:00:00",
+      "temperature": 150.2,
+      "pressure": 5.1,
+      "status": "正常"
+    },
+    {
+      "timestamp": "2023-10-01 09:00:00",
+      "temperature": 155.3,
+      "pressure": 5.2,
+      "status": "正常"
+    },
+    {
+      "timestamp": "2023-10-01 10:00:00",
+      "temperature": 160.1,
+      "pressure": 5.3,
+      "status": "警告"
+    },
+  ]
+}

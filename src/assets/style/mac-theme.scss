@@ -1,0 +1,221 @@
+// macOS 全局主题变量
+$macos-primary: #007AFF;
+$macos-red: #FF3B30;
+$macos-green: #34C759;
+$macos-gray: #8E8E93;
+$macos-background: rgba(242, 242, 247, 0.8);
+$macos-blur: blur(20px);
+
+// 基础样式重置
+@font-face {
+    font-family: 'SF Pro';
+    src: url('@/assets/fonts/SF-Pro.ttf');
+}
+
+body {
+    font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: $macos-background;
+    backdrop-filter: $macos-blur;
+}
+
+// ========= 全局组件覆盖 =========
+// 容器类组件
+.arco-card {
+    border-radius: 12px !important;
+    background: rgba(255, 255, 255, 0.7) !important;
+    backdrop-filter: $macos-blur;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06) !important;
+    border: 1px solid rgba(0, 0, 0, 0.04) !important;
+    
+    &-header {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    }
+}
+
+// 按钮系列
+.arco-btn {
+    border-radius: 8px !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    font-weight: 500 !important;
+    
+    &-primary {
+        background: linear-gradient(135deg, $macos-primary, darken($macos-primary, 10%)) !important;
+        border: none !important;
+        box-shadow: 0 2px 8px rgba($macos-primary, 0.15) !important;
+        
+        &:hover {
+            opacity: 0.9;
+            box-shadow: 0 4px 12px rgba($macos-primary, 0.25) !important;
+        }
+    }
+    
+    /* 默认按钮 (中性风格) */
+    &-status-default {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        color: #1C1C1E;
+        
+        &:hover {
+            background: rgba(0, 0, 0, 0.02);
+            border-color: rgba(0, 0, 0, 0.16);
+        }
+        
+        &:active {
+            background: rgba(0, 0, 0, 0.04);
+        }
+    }
+    
+    /* 危险按钮 (红色系) */
+    &-status-danger {
+        background: linear-gradient(135deg, #FF3B30, #FF2D55);
+        border: none;
+        color: white;
+        
+        &:hover {
+            opacity: 0.9;
+            box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+        }
+        
+        &:active {
+            transform: scale(0.98);
+        }
+    }
+    
+    &-secondary {
+        background: rgba(0, 0, 0, 0.03) !important;
+        border: 1px solid rgba(0, 0, 0, 0.08) !important;
+        
+        &:hover {
+            background: rgba(0, 0, 0, 0.05) !important;
+        }
+    }
+    
+    &-dashed {
+        border: 1px dashed rgba(0, 0, 0, 0.2) !important;
+    }
+    
+    &-text {
+        color: $macos-primary !important;
+        
+        &:hover {
+            background: rgba($macos-primary, 0.05) !important;
+        }
+    }
+}
+
+// 输入组件
+.arco-input, .arco-select, .arco-picker {
+    border-radius: 8px !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    transition: all 0.2s !important;
+    
+    &:hover {
+        border-color: $macos-primary !important;
+    }
+    
+    &:focus {
+        box-shadow: 0 0 0 2px rgba($macos-primary, 0.2) !important;
+    }
+}
+
+// 表格
+.arco-table {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    
+    th {
+        background: rgba(0, 0, 0, 0.02) !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    }
+    
+    tr:hover td {
+        background: rgba($macos-primary, 0.03) !important;
+    }
+    
+    td {
+        border-color: rgba(0, 0, 0, 0.04) !important;
+    }
+}
+
+// 弹窗 & 抽屉
+.arco-modal, .arco-drawer {
+    border-radius: 12px !important;
+    background: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: $macos-blur;
+    
+    &-header {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    }
+}
+
+// 标签
+.arco-tag {
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    
+    &-checkable {
+        transition: all 0.2s !important;
+        
+        &:hover {
+            background: rgba(0, 0, 0, 0.05) !important;
+        }
+    }
+}
+
+// 分页
+.arco-pagination {
+    &-item {
+        border-radius: 8px !important;
+        margin: 0 4px !important;
+        
+        &-active {
+            background: $macos-primary !important;
+            color: white !important;
+        }
+    }
+}
+
+// 进度条
+.arco-progress {
+    &-line {
+        border-radius: 50px !important;
+    }
+    
+    &-bar {
+        border-radius: 50px !important;
+        background: linear-gradient(90deg, $macos-primary, lighten($macos-primary, 15%)) !important;
+    }
+}
+
+// ========= 高级效果 =========
+// 磨砂玻璃容器
+.macos-frosted {
+    background: rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: $macos-blur;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.06),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+// 动态渐变文字
+.macos-gradient-text {
+    background: linear-gradient(135deg, $macos-primary, #AF52DE);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+// 系统级阴影
+.macos-elevation {
+    &-1 {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    }
+    
+    &-2 {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+    }
+    
+    &-3 {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16) !important;
+    }
+}

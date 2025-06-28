@@ -1,0 +1,46 @@
+.container {
+    overflow: hidden;
+    display: flex;
+    height: 100vh;
+    border: 1px solid #dedede;
+    width: 100vw;
+    border-radius: 10px;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translateX(-50%) translateY(-50%);
+
+    .banner {
+        width: 400px;
+        background: linear-gradient(163.85deg, #1d2129 0%, #00308f 100%);
+    }
+
+    .content {
+        border-radius: 10px;
+        position: relative;
+        display: flex;
+        flex: 1;
+        align-items: center;
+        justify-content: center;
+        padding-bottom: 40px;
+    }
+}
+
+.logo {
+    width: 400px;
+    position: fixed;
+    top: 24px;
+    left: 22px;
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+
+    &-text {
+        margin-right: 4px;
+        margin-left: 4px;
+        color: var(--color-fill-1);
+        font-size: 20px;
+    }
+}
