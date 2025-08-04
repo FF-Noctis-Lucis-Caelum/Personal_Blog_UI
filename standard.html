@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代码提交规范 | 团队开发指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .card-hover {
+                transition: all 0.3s ease;
+            }
+            .card-hover:hover {
+                transform: translateY(-5px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+<!-- 顶部导航 -->
+<header class="bg-white shadow-sm sticky top-0 z-50 transition-all duration-300" id="navbar">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+            <i class="fa fa-code-fork text-primary text-2xl"></i>
+            <h1 class="text-xl md:text-2xl font-bold text-dark">代码提交规范</h1>
+        </div>
+        <nav class="hidden md:flex space-x-6">
+            <a href="#purpose" class="text-gray-600 hover:text-primary transition-colors">目的</a>
+            <a href="#format" class="text-gray-600 hover:text-primary transition-colors">格式</a>
+            <a href="#labels" class="text-gray-600 hover:text-primary transition-colors">标识说明</a>
+            <a href="#rules" class="text-gray-600 hover:text-primary transition-colors">规则</a>
+            <a href="#examples" class="text-gray-600 hover:text-primary transition-colors">示例</a>
+        </nav>
+        <button class="md:hidden text-gray-600" id="menuToggle">
+            <i class="fa fa-bars text-xl"></i>
+        </button>
+    </div>
+    <!-- 移动端菜单 -->
+    <div class="md:hidden hidden bg-white w-full border-t" id="mobileMenu">
+        <div class="container mx-auto px-4 py-2 flex flex-col space-y-3">
+            <a href="#purpose" class="text-gray-600 hover:text-primary py-2 transition-colors">目的</a>
+            <a href="#format" class="text-gray-600 hover:text-primary py-2 transition-colors">格式</a>
+            <a href="#labels" class="text-gray-600 hover:text-primary py-2 transition-colors">标识说明</a>
+            <a href="#rules" class="text-gray-600 hover:text-primary py-2 transition-colors">规则</a>
+            <a href="#examples" class="text-gray-600 hover:text-primary py-2 transition-colors">示例</a>
+        </div>
+    </div>
+</header>
+
+<!-- 英雄区域 -->
+<section class="bg-gradient-to-r from-primary to-accent text-white py-16 md:py-24">
+    <div class="container mx-auto px-4 text-center">
+        <h2 class="text-3xl md:text-5xl font-bold mb-4 text-shadow">统一代码提交标准</h2>
+        <p class="text-lg md:text-xl max-w-3xl mx-auto opacity-90">规范的提交信息有助于提高团队协作效率，简化代码审查流程，便于版本回溯和项目管理</p>
+        <div class="mt-10">
+            <a href="#purpose" class="bg-white text-primary px-6 py-3 rounded-lg font-medium inline-flex items-center hover:bg-opacity-90 transition-all shadow-lg">
+                了解规范 <i class="fa fa-arrow-down ml-2"></i>
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- 主要内容 -->
+<main class="container mx-auto px-4 py-12">
+    <!-- 目的部分 -->
+    <section id="purpose" class="mb-16 scroll-mt-20">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white mr-4">
+                <i class="fa fa-bullseye"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">规范目的</h2>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-gray-100">
+            <p class="text-gray-700 leading-relaxed">
+                本规范旨在统一团队代码提交风格，提高代码提交信息的可读性和规范性。通过一致的提交格式，团队可以：
+            </p>
+            <ul class="mt-4 space-y-2">
+                <li class="flex items-start">
+                    <i class="fa fa-check-circle text-secondary mt-1 mr-2"></i>
+                    <span>简化代码审查流程，提高团队协作效率</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-check-circle text-secondary mt-1 mr-2"></i>
+                    <span>便于版本回溯，快速定位问题修复记录</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-check-circle text-secondary mt-1 mr-2"></i>
+                    <span>自动生成清晰的版本更新日志</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-check-circle text-secondary mt-1 mr-2"></i>
+                    <span>建立良好的开发习惯，提升项目质量</span>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- 格式部分 -->
+    <section id="format" class="mb-16 scroll-mt-20">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-white mr-4">
+                <i class="fa fa-list-alt"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">提交信息格式</h2>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-gray-100">
+            <p class="text-gray-700 mb-4">所有代码提交备注必须遵循以下格式：</p>
+            <div class="bg-gray-800 text-gray-100 p-4 rounded-lg font-mono text-sm md:text-base mb-6 overflow-x-auto">
+                [标识] 编号: 具体描述内容
+            </div>
+
+            <p class="text-gray-700 mb-4">格式说明：</p>
+            <div class="grid md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div class="font-semibold text-primary mb-2">标识</div>
+                    <div class="text-gray-600 text-sm">表示提交类型的分类标签，如[Bug]、[feature]等</div>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div class="font-semibold text-primary mb-2">编号</div>
+                    <div class="text-gray-600 text-sm">两位数字编号，从01开始，每个标识类别独立编号</div>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <div class="font-semibold text-primary mb-2">描述内容</div>
+                    <div class="text-gray-600 text-sm">简洁明了地描述提交的具体内容和目的</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 标识说明部分 -->
+    <section id="labels" class="mb-16 scroll-mt-20">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white mr-4">
+                <i class="fa fa-tags"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">标识及作用说明</h2>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6">
+            <!-- Bug 标识 -->
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 card-hover">
+                <div class="bg-danger bg-opacity-10 px-6 py-4 border-b border-gray-100">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-danger flex items-center justify-center text-white mr-3">
+                            <i class="fa fa-bug"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-danger">[Bug]</h3>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <h4 class="font-semibold mb-2 text-gray-800">作用</h4>
+                    <p class="text-gray-600 mb-4">用于标识修复程序中存在的错误或缺陷</p>
+
+                    <h4 class="font-semibold mb-2 text-gray-800">适用场景</h4>
+                    <ul class="space-y-1 text-gray-600">
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-danger mt-1 mr-2"></i>
+                            <span>功能无法正常运行</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-danger mt-1 mr-2"></i>
+                            <span>程序出现崩溃或异常</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-danger mt-1 mr-2"></i>
+                            <span>计算结果错误</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-danger mt-1 mr-2"></i>
+                            <span>界面显示异常</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Feature 标识 -->
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 card-hover">
+                <div class="bg-secondary bg-opacity-10 px-6 py-4 border-b border-gray-100">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white mr-3">
+                            <i class="fa fa-plus-circle"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-secondary">[feature]</h3>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <h4 class="font-semibold mb-2 text-gray-800">作用</h4>
+                    <p class="text-gray-600 mb-4">用于标识新增的功能模块或功能点</p>
+
+                    <h4 class="font-semibold mb-2 text-gray-800">适用场景</h4>
+                    <ul class="space-y-1 text-gray-600">
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-secondary mt-1 mr-2"></i>
+                            <span>新增页面</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-secondary mt-1 mr-2"></i>
+                            <span>新增交互功能</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-secondary mt-1 mr-2"></i>
+                            <span>新增业务逻辑</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-secondary mt-1 mr-2"></i>
+                            <span>新增API接口</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Change 标识 -->
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 card-hover">
+                <div class="bg-primary bg-opacity-10 px-6 py-4 border-b border-gray-100">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white mr-3">
+                            <i class="fa fa-refresh"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-primary">[change]</h3>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <h4 class="font-semibold mb-2 text-gray-800">作用</h4>
+                    <p class="text-gray-600 mb-4">用于标识对现有功能的修改或优化</p>
+
+                    <h4 class="font-semibold mb-2 text-gray-800">适用场景</h4>
+                    <ul class="space-y-1 text-gray-600">
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-primary mt-1 mr-2"></i>
+                            <span>界面布局调整</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-primary mt-1 mr-2"></i>
+                            <span>功能流程优化</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-primary mt-1 mr-2"></i>
+                            <span>代码结构重构</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-primary mt-1 mr-2"></i>
+                            <span>性能优化</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Fix 标识 -->
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100 card-hover">
+                <div class="bg-warning bg-opacity-10 px-6 py-4 border-b border-gray-100">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full bg-warning flex items-center justify-center text-white mr-3">
+                            <i class="fa fa-wrench"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-warning">[fix]</h3>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <h4 class="font-semibold mb-2 text-gray-800">作用</h4>
+                    <p class="text-gray-600 mb-4">用于标识对已修复问题的再次修复或补充修复</p>
+
+                    <h4 class="font-semibold mb-2 text-gray-800">适用场景</h4>
+                    <ul class="space-y-1 text-gray-600">
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-warning mt-1 mr-2"></i>
+                            <span>之前修复的Bug再次出现</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-warning mt-1 mr-2"></i>
+                            <span>修复方案不完善需要补充</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fa fa-angle-right text-warning mt-1 mr-2"></i>
+                            <span>修复导致了新的问题需要解决</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 规则部分 -->
+    <section id="rules" class="mb-16 scroll-mt-20">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-warning flex items-center justify-center text-white mr-4">
+                <i class="fa fa-list-ol"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">编号与描述规则</h2>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-gray-100">
+            <div class="mb-8">
+                <h3 class="text-xl font-bold mb-4 text-gray-800">编号规则</h3>
+                <ul class="space-y-3">
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">1</div>
+                        <span class="text-gray-700">编号为两位数字，从01开始依次递增（01, 02, 03, ..., 99）</span>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">2</div>
+                        <span class="text-gray-700">每个标识类别独立编号，如[Bug] 01、[Bug] 02...，[feature] 01、[feature] 02...</span>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">3</div>
+                        <span class="text-gray-700">编号由开发者根据本类别提交次数自行维护</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div>
+                <h3 class="text-xl font-bold mb-4 text-gray-800">描述内容规范</h3>
+                <ul class="space-y-3">
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">1</div>
+                        <span class="text-gray-700">简洁明了，准确描述提交的主要内容，建议不超过50个字符</span>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">2</div>
+                        <span class="text-gray-700">使用中文，首字母小写</span>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">3</div>
+                        <span class="text-gray-700">避免模糊不清的表述，如"修改了一些问题"、"优化了代码"等</span>
+                    </li>
+                    <li class="flex items-start">
+                        <div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 mt-0.5 mr-3 flex-shrink-0">4</div>
+                        <span class="text-gray-700">描述应能体现修改的位置和主要内容，如"修复登录页面验证码不显示问题"</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 示例部分 -->
+    <section id="examples" class="mb-16 scroll-mt-20">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-dark flex items-center justify-center text-white mr-4">
+                <i class="fa fa-file-code-o"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">提交示例</h2>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-gray-100">
+            <p class="text-gray-700 mb-6">以下是符合规范的提交信息示例：</p>
+
+            <div class="space-y-4">
+                <div class="bg-danger bg-opacity-5 p-4 rounded-lg border border-danger border-opacity-20">
+                    <div class="font-mono text-sm md:text-base text-danger mb-2">[Bug] 01: 修复登录页面验证码不显示问题</div>
+                    <div class="text-gray-600 text-sm">修复了登录页面刷新后验证码图片无法正常加载的问题</div>
+                </div>
+
+                <div class="bg-secondary bg-opacity-5 p-4 rounded-lg border border-secondary border-opacity-20">
+                    <div class="font-mono text-sm md:text-base text-secondary mb-2">[feature] 02: 新增用户个人资料编辑功能</div>
+                    <div class="text-gray-600 text-sm">实现用户可以修改个人信息、上传头像等功能</div>
+                </div>
+
+                <div class="bg-primary bg-opacity-5 p-4 rounded-lg border border-primary border-opacity-20">
+                    <div class="font-mono text-sm md:text-base text-primary mb-2">[change] 03: 优化首页加载速度</div>
+                    <div class="text-gray-600 text-sm">对首页图片进行懒加载处理，减少初始加载资源</div>
+                </div>
+
+                <div class="bg-warning bg-opacity-5 p-4 rounded-lg border border-warning border-opacity-20">
+                    <div class="font-mono text-sm md:text-base text-warning mb-2">[fix] 01: 完善数据校验逻辑</div>
+                    <div class="text-gray-600 text-sm">补充了边界条件的校验，修复了特殊字符导致的异常</div>
+                </div>
+            </div>
+
+            <div class="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h4 class="font-semibold text-gray-800 mb-2">不符合规范的示例（避免使用）：</h4>
+                <ul class="space-y-2 text-gray-600">
+                    <li class="flex items-start">
+                        <i class="fa fa-times-circle text-danger mt-1 mr-2"></i>
+                        <span class="font-mono text-sm">修复bug</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fa fa-times-circle text-danger mt-1 mr-2"></i>
+                        <span class="font-mono text-sm">[修改] 1: 改了点东西</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fa fa-times-circle text-danger mt-1 mr-2"></i>
+                        <span class="font-mono text-sm">[Feature] 001: 添加新功能</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- 实施要求 -->
+    <section class="mb-16">
+        <div class="flex items-center mb-6">
+            <div class="w-10 h-10 rounded-full bg-dark flex items-center justify-center text-white mr-4">
+                <i class="fa fa-gavel"></i>
+            </div>
+            <h2 class="text-2xl md:text-3xl font-bold text-dark">实施要求</h2>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-6 md:p-8 border border-gray-100">
+            <ul class="space-y-4">
+                <li class="flex items-start">
+                    <i class="fa fa-exclamation-circle text-primary mt-1 mr-3 text-lg"></i>
+                    <span class="text-gray-700">所有团队成员必须严格遵守本规范</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-exclamation-circle text-primary mt-1 mr-3 text-lg"></i>
+                    <span class="text-gray-700">代码提交前需检查提交信息是否符合规范</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-exclamation-circle text-primary mt-1 mr-3 text-lg"></i>
+                    <span class="text-gray-700">代码审查时，提交信息不符合规范的应要求提交者修改</span>
+                </li>
+                <li class="flex items-start">
+                    <i class="fa fa-exclamation-circle text-primary mt-1 mr-3 text-lg"></i>
+                    <span class="text-gray-700">本规范自发布之日起执行，随着项目发展可根据实际需求修订</span>
+                </li>
+            </ul>
+        </div>
+    </section>
+</main>
+
+<!-- 页脚 -->
+<footer class="bg-dark text-white py-10">
+    <div class="container mx-auto px-4">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+            <div class="mb-6 md:mb-0">
+                <div class="flex items-center space-x-2 mb-2">
+                    <i class="fa fa-code-fork text-primary text-xl"></i>
+                    <span class="font-bold text-lg">代码提交规范</span>
+                </div>
+                <p class="text-gray-400 text-sm">统一团队代码提交标准，提升协作效率</p>
+            </div>
+            <div class="flex space-x-4">
+                <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center hover:bg-primary transition-colors">
+                    <i class="fa fa-github"></i>
+                </a>
+                <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center hover:bg-primary transition-colors">
+                    <i class="fa fa-jira"></i>
+                </a>
+                <a href="#" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center hover:bg-primary transition-colors">
+                    <i class="fa fa-confluence"></i>
+                </a>
+            </div>
+        </div>
+        <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400 text-sm">
+            &copy; 2025 龙渊博客开发文档 | 代码提交规范 v1.0
+        </div>
+    </div>
+</footer>
+
+<!-- 返回顶部按钮 -->
+<button id="backToTop" class="fixed bottom-6 right-6 bg-primary text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg opacity-0 invisible transition-all duration-300">
+    <i class="fa fa-arrow-up"></i>
+</button>
+
+<script>
+    // 移动端菜单切换
+    const menuToggle = document.getElementById('menuToggle');
+    const mobileMenu = document.getElementById('mobileMenu');
+
+    menuToggle.addEventListener('click', () => {
+        mobileMenu.classList.toggle('hidden');
+    });
+
+    // 导航栏滚动效果
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 100) {
+            navbar.classList.add('py-2', 'shadow');
+            navbar.classList.remove('py-4');
+        } else {
+            navbar.classList.add('py-4');
+            navbar.classList.remove('py-2', 'shadow');
+        }
+    });
+
+    // 平滑滚动
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            // 关闭移动菜单（如果打开）
+            if (!mobileMenu.classList.contains('hidden')) {
+                mobileMenu.classList.add('hidden');
+            }
+
+            document.querySelector(this.getAttribute('href')).scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+    });
+
+    // 返回顶部按钮
+    const backToTopButton = document.getElementById('backToTop');
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            backToTopButton.classList.remove('opacity-0', 'invisible');
+            backToTopButton.classList.add('opacity-100', 'visible');
+        } else {
+            backToTopButton.classList.add('opacity-0', 'invisible');
+            backToTopButton.classList.remove('opacity-100', 'visible');
+        }
+    });
+
+    backToTopButton.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+</script>
+</body>
+</html>
