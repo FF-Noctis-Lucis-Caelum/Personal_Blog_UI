@@ -15,7 +15,15 @@ const router = createRouter({
     routes: [
         {
             path: '/',
-            redirect: 'login',
+            redirect: 'welcome',
+        },
+        {
+            path: '/welcome',
+            name: 'welcome',
+            component: () => import('@/views/Home/welcome.vue'),
+            meta: {
+                requiresAuth: false,
+            },
         },
         {
             path: '/login',
@@ -33,14 +41,7 @@ const router = createRouter({
                 requiresAuth: false,
             }
         },
-        {
-            path: '/hello',
-            name: 'hello',
-            component: () => import('@/components/HelloWorld.vue')
-        },
         ...appRoutes,
-        REDIRECT_MAIN,
-        NOT_FOUND_ROUTE,
     ],
     scrollBehavior() {
         return { top: 0 }

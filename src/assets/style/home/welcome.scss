@@ -1,0 +1,61 @@
+@use '../global.scss' as *;
+@font-face {
+    font-family: '汉呈水墨中国风';
+    src: url('../../fonts/汉呈水墨中国风.ttf'); /* 替换为字体文件路径 */
+}
+.WelComeBox {
+    @include SizeSet(100vw, auto);
+    @include Relative();
+    .container {
+        @include Relative();
+        @include SizeSet(100%, 100vh);
+        overflow: hidden;
+        .bg_img {
+            @include Absolute();
+            z-index: 1;
+            @include Back('@/assets/images/back/bg1.png');
+        }
+        .trapezoid {
+            @include Absolute();
+            @include Padding(60px 0 0 40px);
+            @include SizeSet(56%, 100%);
+            @include Back_C(linear-gradient(45deg, transparent, rgba(0, 0, 0, 0.45)));
+            z-index: 2;
+            clip-path: polygon(0 -80%, 100% 100%, 85% 100%, 0% 100%);
+            .Author {
+                font-family: '汉呈水墨中国风', serif;
+                font-size: 20px;
+                cursor: pointer;
+            }
+            .epigram {
+                margin-top: 30vh;
+                margin-left: 100px;
+                max-width: 400px;
+                text-wrap: wrap;
+                display: flex;
+                flex-direction: column;
+                gap: 25px;
+                .timeLine, .subText {
+                    font-size: 12px;
+                }
+                .text {
+                    font-size: 24px;
+                    font-weight: bold;
+                    cursor: pointer;
+                }
+                .text:hover {
+                    text-decoration: underline solid #fff 2px;
+                }
+            }
+        }
+    }
+}
+
+.lens-effect {
+    background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.7) 70%, rgba(0, 0, 0, 0.9) 100%);
+    z-index: 1;
+}
+
+.primary {
+    background-color: #165DFF;
+}
