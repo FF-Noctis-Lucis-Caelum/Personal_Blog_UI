@@ -33,14 +33,7 @@ const router = createRouter({
                 requiresAuth: false,
             }
         },
-        {
-            path: '/hello',
-            name: 'hello',
-            component: () => import('@/components/HelloWorld.vue')
-        },
         ...appRoutes,
-        REDIRECT_MAIN,
-        NOT_FOUND_ROUTE,
     ],
     scrollBehavior() {
         return { top: 0 }
