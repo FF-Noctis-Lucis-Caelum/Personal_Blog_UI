@@ -15,7 +15,15 @@ const router = createRouter({
     routes: [
         {
             path: '/',
-            redirect: 'login',
+            redirect: 'welcome',
+        },
+        {
+            path: '/welcome',
+            name: 'welcome',
+            component: () => import('@/views/Home/welcome.vue'),
+            meta: {
+                requiresAuth: false,
+            },
         },
         {
             path: '/login',
