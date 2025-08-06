@@ -1,5 +1,6 @@
 <template>
     <div class="WelComeBox">
+        <MagicRouter />
         <!-- 背景容器（限制显示区域） -->
         <div class="container">
             <!-- 内部背景盒子（用于偏移的元素） -->
@@ -35,6 +36,7 @@ import { ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 import { useLoading } from '@/hooks/CyLoading'
 import {useRoute} from "vue-router";
 import {useLoadingCacheStore} from "@/store/modules/loading/LoadingCache";
+import MagicRouter from "@/views/Home/components/magicRouter.vue";
 
 const route = useRoute()
 const { hideLoading } = useLoading()
