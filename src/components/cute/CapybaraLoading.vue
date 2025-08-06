@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineProps, computed } from 'vue'
+import { computed } from 'vue'
 import AnimatedLoadingText from "@/components/cute/AnimatedLoadingText.vue";
 
 
@@ -81,6 +81,10 @@ const maskStyle = computed(() => ({
 const containerStyle = computed(() => ({
     display: props.visible ? 'flex' : 'none'
 }))
+
+import { useLoading } from '@/hooks/CyLoading' // 引入加载状态管理
+// 获取全局加载状态
+const { isLoading } = useLoading()
 </script>
 
 <template>
@@ -93,7 +97,8 @@ const containerStyle = computed(() => ({
         <div
             class="loading-mask"
             v-if="showMask"
-            :style="maskStyle"
+            :style="[maskStyle, { transition: 'all 0.2s ease-in-out' }]"
+            :class="{ 'mask-fade-out': !isLoading }"
         ></div>
 
         <!-- 加载内容 -->
@@ -129,8 +134,6 @@ const containerStyle = computed(() => ({
                 :color="textColor"
                 :font-size="textSize"
                 :speed="textSpeed"
-                :left="left"
-                :top="top"
                 :animation="textAnimation"
             />
         </div>
@@ -157,6 +160,11 @@ const containerStyle = computed(() => ({
     right: 0;
     bottom: 0;
     transition: opacity 0.3s;
+}
+
+/* 遮罩消失动画 */
+.mask-fade-out {
+    opacity: 0 !important;
 }
 
 .loading-content {
