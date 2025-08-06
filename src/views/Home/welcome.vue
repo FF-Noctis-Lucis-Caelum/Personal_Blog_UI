@@ -33,8 +33,12 @@ import dayjs from "dayjs";
 import 'dayjs/locale/zh-cn'; // 中文支持
 import { ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 import { useLoading } from '@/hooks/CyLoading'
+import {useRoute} from "vue-router";
+import {useLoadingCacheStore} from "@/store/modules/loading/LoadingCache";
 
+const route = useRoute()
 const { hideLoading } = useLoading()
+const loadingCacheStore = useLoadingCacheStore()
 // 响应式数据
 const backgroundRef = ref(null)
 const offsetX = ref(0)
@@ -69,7 +73,18 @@ const setBackgroundSize = () => {
 
 // 生命周期钩子
 onMounted(() => {
-    hideLoading()
+    // 从Pinia缓存中获取并移除当前路由的opId
+    if (route.name) {
+        const opId = loadingCacheStore.takeRouteOpId(route.name.toString())
+        if (opId) {
+            console.log(`组件${route.name}挂载完成，关闭加载，操作ID: ${opId}`)
+            hideLoading(opId)
+        } else {
+            // 异常情况处理
+            console.warn(`组件${route.name}未找到对应的操作ID`)
+            hideLoading()
+        }
+    }
     setBackgroundSize()
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('resize', setBackgroundSize)
