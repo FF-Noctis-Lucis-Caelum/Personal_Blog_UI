@@ -13,5 +13,6 @@ declare module 'vue-router' {
         noAffix?: boolean // if set true, the tag will not affix in the tab-bar
         ignoreCache?: boolean // if set true, the page will not be cached
         waitForMount?: boolean // if set true, the page will not be displayed until the component is mounted
+        loadingOpId?: number // The operation id of the loading page
     }
 }
