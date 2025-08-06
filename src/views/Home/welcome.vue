@@ -21,28 +21,20 @@
             </div>
 
         </div>
-        <!-- 引入水豚加载组件 -->
-        <CapybaraLoading
-            :visible="false"
-            :text="'正在登录...'"
-            :showMask="true"
-            :maskOpacity="0.8"
-            :maskColor="'rgba(122,121,121,0.8)'"
-            width="16em"
-            height="12em"
-        />
+
         <!-- 镜头效果 -->
         <div class="lens-effect" />
 
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import dayjs from "dayjs";
 import 'dayjs/locale/zh-cn'; // 中文支持
 import { ref, onMounted, onBeforeUnmount, watchEffect } from 'vue'
-import CapybaraLoading from "@/components/cute/CapybaraLoading.vue";
+import { useLoading } from '@/hooks/CyLoading'
 
+const { hideLoading } = useLoading()
 // 响应式数据
 const backgroundRef = ref(null)
 const offsetX = ref(0)
@@ -77,6 +69,7 @@ const setBackgroundSize = () => {
 
 // 生命周期钩子
 onMounted(() => {
+    hideLoading()
     setBackgroundSize()
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('resize', setBackgroundSize)
