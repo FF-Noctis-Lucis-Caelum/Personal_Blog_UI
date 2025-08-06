@@ -4,10 +4,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 import createRouteGuard from './guard'
 import { appRoutes } from './routes'
-import { NOT_FOUND_ROUTE, REDIRECT_MAIN } from './routes/base'
-import { useUserStore } from '@/store'
-import { getToken } from '@/utils/auth'
-
+import { useLoading } from '@/hooks/CyLoading'
 NProgress.configure({ showSpinner: false }) // NProgress Configuration
 
 const router = createRouter({
@@ -23,6 +20,7 @@ const router = createRouter({
             component: () => import('@/views/Home/welcome.vue'),
             meta: {
                 requiresAuth: false,
+                waitForMount: true
             },
         },
         {
@@ -31,6 +29,7 @@ const router = createRouter({
             component: () => import('@/views/Rbac/login.vue'),
             meta: {
                 requiresAuth: false,
+                waitForMount: false
             },
         },
         {
@@ -49,5 +48,21 @@ const router = createRouter({
 })
 
 createRouteGuard(router)
+
+const { showLoading, hideLoading } = useLoading()
+let currentRouteNeedWait = false // 记录当前路由是否需要等待挂载
+// 全局前置守卫 - 路由跳转开始时显示加载
+router.beforeEach((to, from, next) => {
+    currentRouteNeedWait = to.meta.waitForMount === true
+    console.log(currentRouteNeedWait)
+    showLoading()
+    next()
+})
+
+router.afterEach(() => {
+    if( !currentRouteNeedWait ) {
+        hideLoading()
+    }
+})
 
 export default router
