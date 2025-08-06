@@ -77,11 +77,11 @@ onMounted(() => {
     if (route.name) {
         const opId = loadingCacheStore.takeRouteOpId(route.name.toString())
         if (opId) {
-            console.log(`组件${route.name}挂载完成，关闭加载，操作ID: ${opId}`)
+            console.log(`组件[${route.name}]挂载完成，关闭加载，操作ID: [${opId}]`)
             hideLoading(opId)
         } else {
             // 异常情况处理
-            console.warn(`组件${route.name}未找到对应的操作ID`)
+            console.warn(`组件[${route.name}]未找到对应的操作ID`)
             hideLoading()
         }
     }
