@@ -9,6 +9,7 @@ import directive from './directive'
 import ArcoVueIcon from '@arco-design/web-vue/es/icon'
 import ArcoVue from '@arco-design/web-vue'
 import '@arco-design/web-vue/dist/arco.css'
+import zhCN from '@arco-design/web-vue/es/locale/lang/zh-CN'
 
 // Styles are imported via arco-plugin. See config/plugin/arcoStyleImport.ts in the directory for details
 // 样式通过 arco-plugin 插件导入。详见目录文件 config/plugin/arcoStyleImport.ts
@@ -35,17 +36,25 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 // 引入路由
 import router from './router'
 
+// 水豚加载器
+import CapybaraLoading from "@/components/cute/CapybaraLoading.vue";
+
+// 根据你的i18n全局语言动态切换
+
 const app = createApp(App)
 
 library.add(faServer, faDesktop /* 其他图标 */)
 app.component('font-awesome-icon', FontAwesomeIcon)
 
 // 使用组件
+app.component('CapybaraLoading', CapybaraLoading)
 app.component('BaseEChart', BaseEChart)
 app.component('BaseVChart', BaseVChart)
 app.component('e-charts', Echarts) // 全局注册 ECharts
 app.config.globalProperties.$echarts = echarts;
-app.use(ArcoVue)
+app.use(ArcoVue, {
+    locale: zhCN,
+})
 app.use(ArcoVueIcon)
 app.use(router)
 app.use(store)

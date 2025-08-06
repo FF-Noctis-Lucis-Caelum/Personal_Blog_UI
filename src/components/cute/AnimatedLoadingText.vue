@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {defineProps, computed} from 'vue'
+import {computed} from 'vue'
 
 const props = defineProps({
     // 加载文本内容
@@ -62,7 +62,7 @@ const textStyle = computed(() => ({
 </script>
 
 <template>
-    <div class="animated-loading-text" :style="{top: top, left: left}">
+    <div class="animated-loading-text">
         <!-- 根据选择的动画类型应用不同的类 -->
         <span
             :class="['loading-text-content', animation]"
