@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, nextTick } from "vue";
-import { useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
-import { Message } from "@arco-design/web-vue";
+import {nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {useRouter} from "vue-router";
+import {useI18n} from "vue-i18n";
+import {Message} from "@arco-design/web-vue";
 import 'animate.css/animate.min.css';
 
 // 国际化配置
 const { t } = useI18n();
 
-// 博客路由导航结构（添加特色图标）
+// 博客路由导航结构
 const navItems = ref([
     {
         name: 'home',
         label: 'nav.home',
-        icon: 'fa-house-chimney' // 首页图标
+        icon: 'fa-house-chimney'
     },
     {
         name: 'articles',
         label: 'nav.articles',
-        icon: 'fa-book-open', // 文章图标
+        icon: 'fa-book-open',
         children: [
             { name: 'articles-latest', label: 'nav.latest', icon: 'fa-clock-rotate-left' },
             { name: 'articles-popular', label: 'nav.popular', icon: 'fa-fire-flame-curved' },
@@ -28,7 +28,7 @@ const navItems = ref([
     {
         name: 'categories',
         label: 'nav.categories',
-        icon: 'fa-folder-tree', // 分类图标
+        icon: 'fa-folder-tree',
         children: [
             { name: 'category-tech', label: 'nav.tech', icon: 'fa-microchip' },
             { name: 'category-life', label: 'nav.life', icon: 'fa-heart' },
@@ -38,12 +38,12 @@ const navItems = ref([
     {
         name: 'tags',
         label: 'nav.tags',
-        icon: 'fa-tags' // 标签图标
+        icon: 'fa-tags'
     },
     {
         name: 'about',
         label: 'nav.about',
-        icon: 'fa-user-secret' // 关于图标
+        icon: 'fa-user-secret'
     }
 ]);
 
@@ -68,26 +68,206 @@ const findActiveNavItem = (routeName: string, items: any[]): any => {
     return null;
 };
 
-// 初始化
-onMounted(() => {
-    const initialMatch = findActiveNavItem(router.currentRoute.value.name as string, navItems.value);
-    currentNavItem.value = initialMatch?.label || 'nav.home';
-
-    // 初始化主题
-    applyTheme(themes.value[0].colors);
-});
-
-// 路由跳转
-const navTo = (name: string) => {
-    if (router.hasRoute(name)) {
-        router.push({ name });
-        // 关闭菜单和搜索框
-        isCollapsed.value = true;
+// 折叠状态
+const isCollapsed = ref(true);
+const changeCollapsed = () => {
+    isCollapsed.value = !isCollapsed.value;
+    if (isCollapsed.value) {
         isSearchExpanded.value = false;
         searchQuery.value = '';
+        activeDropdown.value = null;
+        isThemePanelOpen.value = false;
+        searchResults.value = []; // 关闭菜单时清空搜索结果
+    }
+};
+
+// 搜索功能 - 实时检索实现
+const searchQuery = ref('');
+const isSearchExpanded = ref(false);
+const searchInputRef = ref<HTMLInputElement>(null);
+const searchResults = ref<any[]>([]);
+const isSearching = ref(false);
+const selectedResultIndex = ref(-1);
+
+// 防抖函数 - 减少API请求次数
+const debounce = (func: Function, delay: number) => {
+    let timeoutId: number | null = null;
+    return (...args: any[]) => {
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+            func.apply(this, args);
+        }, delay);
+    };
+};
+
+// 【修复1：完善错误处理和状态重置】
+const performSearch = async (query: string) => {
+    // 确保每次搜索前重置状态
+    isSearching.value = true;
+    searchResults.value = [];
+
+    if (query.trim().length < 2) {
+        isSearching.value = false; // 立即重置状态
+        return;
+    }
+
+    try {
+        console.log('开始搜索:', query);
+        const mockResults = await mockSearchAPI(query);
+        console.log('搜索结果:', mockResults);
+
+        // 确保在DOM更新前设置结果
+        await nextTick(() => {
+            searchResults.value = mockResults;
+            isSearching.value = false;
+        });
+    } catch (error) {
+        console.error('搜索失败:', error);
+        Message.error(t('search.error'));
+        isSearching.value = false; // 错误时也需要重置
+    }
+};
+
+
+// 防抖处理后的搜索函数
+const debouncedSearch = debounce(performSearch, 300);
+
+// 监听搜索输入变化
+watch(searchQuery, (newVal) => {
+    debouncedSearch(newVal);
+});
+
+// 【修复2：改进模拟API，确保可靠返回】
+const mockSearchAPI = (query: string): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+        // 模拟网络延迟
+        const timer = setTimeout(() => {
+            clearTimeout(timer);
+
+            // 模拟极端情况的错误处理
+            if (!query || query.length < 1) {
+                reject(new Error('无效的搜索关键词'));
+                return;
+            }
+
+            // 生成模拟结果
+            const results = [
+                // 文章结果
+                {
+                    id: 1,
+                    title: `如何理解${query}的文化背景`,
+                    type: 'article',
+                    route: 'article',
+                    params: { id: 1 },
+                    excerpt: `本文探讨了${query}的文化起源和发展历程...`,
+                    date: '2023-05-15'
+                },
+                {
+                    id: 2,
+                    title: `${query}旅游指南`,
+                    type: 'article',
+                    route: 'article',
+                    params: { id: 2 },
+                    excerpt: `这是一份详细的${query}旅游攻略，包含必去景点和美食推荐...`,
+                    date: '2023-06-20'
+                },
+                // 标签结果
+                {
+                    id: 101,
+                    name: query,
+                    type: 'tag',
+                    route: 'tag',
+                    params: { name: query },
+                    count: 15
+                },
+                {
+                    id: 102,
+                    name: `${query}历史`,
+                    type: 'tag',
+                    route: 'tag',
+                    params: { name: `${query}历史` },
+                    count: 8
+                },
+                // 分类结果
+                {
+                    id: 201,
+                    name: `${query}文化`,
+                    type: 'category',
+                    route: 'category',
+                    params: { name: `${query}文化` },
+                    count: 23
+                }
+            ];
+            resolve(results);
+        }, 300);
+    });
+};
+
+// 关键词高亮函数
+const highlightMatch = (text: string, query: string) => {
+    if (!query) return text;
+    const regex = new RegExp(`(${query})`, 'gi');
+    return text.replace(regex, '<span class="highlight">$1</span>');
+};
+
+// 处理搜索结果点击
+const handleResultClick = (result: any) => {
+    router.push({ name: result.route, params: result.params });
+    searchQuery.value = '';
+    searchResults.value = [];
+    isCollapsed.value = true;
+};
+
+// 键盘导航处理
+const handleKeydown = (e: KeyboardEvent) => {
+    // 上下箭头导航
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedResultIndex.value = (selectedResultIndex.value + 1) % searchResults.value.length;
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedResultIndex.value = (selectedResultIndex.value - 1 + searchResults.value.length) % searchResults.value.length;
+    }
+    // 回车选中
+    else if (e.key === 'Enter' && selectedResultIndex.value !== -1) {
+        e.preventDefault();
+        handleResultClick(searchResults.value[selectedResultIndex.value]);
+    }
+    // ESC清除
+    else if (e.key === 'Escape') {
+        searchQuery.value = '';
+        searchResults.value = [];
+        selectedResultIndex.value = -1;
+    }
+};
+
+// 搜索框聚焦/失焦处理
+const toggleSearch = (event?: MouseEvent) => {
+    if (event) event.stopPropagation();
+    isSearchExpanded.value = !isSearchExpanded.value;
+    if (isSearchExpanded.value) {
+        nextTick(() => {
+            searchInputRef.value?.focus();
+        });
     } else {
-        // 确保提示在最上层
-        Message.error(t('message.pageNotFound'));
+        // 失焦时不清空，保持用户输入
+        selectedResultIndex.value = -1;
+    }
+};
+
+const handleSearch = (e?: KeyboardEvent) => {
+    if (e && e.key !== 'Enter') return;
+    if (searchQuery.value.trim()) {
+        // 如果有选中的结果，直接跳转
+        if (selectedResultIndex.value !== -1 && searchResults.value.length > 0) {
+            handleResultClick(searchResults.value[selectedResultIndex.value]);
+        } else {
+            // 否则跳转到搜索结果页
+            router.push({ name: 'search', query: { q: searchQuery.value.trim() } });
+            searchQuery.value = '';
+            searchResults.value = [];
+            isCollapsed.value = true;
+        }
     }
 };
 
@@ -109,56 +289,24 @@ const hideDropdown = () => {
     return () => clearTimeout(timer);
 };
 
-// 折叠状态
-const isCollapsed = ref(true);
-const changeCollapsed = () => {
-    isCollapsed.value = !isCollapsed.value;
-    if (isCollapsed.value) {
-        isSearchExpanded.value = false;
-        searchQuery.value = '';
-        activeDropdown.value = null;
-        isThemePanelOpen.value = false; // 关闭主题面板
-    }
-};
-
-// 搜索功能
-const searchQuery = ref('');
-const isSearchExpanded = ref(false);
-const searchInputRef = ref<HTMLInputElement>(null);
-
-const toggleSearch = (event?: MouseEvent) => {
-    if (event) event.stopPropagation();
-    isSearchExpanded.value = !isSearchExpanded.value;
-    if (isSearchExpanded.value) {
-        nextTick(() => {
-            searchInputRef.value?.focus();
-        });
-    } else {
-        searchQuery.value = '';
-    }
-};
-
-const handleSearch = (e?: KeyboardEvent) => {
-    if (e && e.key !== 'Enter') return;
-    if (searchQuery.value.trim()) {
-        router.push({ name: 'search', query: { q: searchQuery.value.trim() } });
-        searchQuery.value = '';
-        isSearchExpanded.value = false;
+// 路由跳转
+const navTo = (name: string) => {
+    if (router.hasRoute(name)) {
+        router.push({ name });
+        // 关闭菜单和搜索框
         isCollapsed.value = true;
+        isSearchExpanded.value = false;
+        searchQuery.value = '';
+        searchResults.value = [];
+    } else {
+        Message.error(t('message.pageNotFound'));
     }
 };
-
-onMounted(() => {
-    document.addEventListener('click', () => {
-        if (!isMouseOverDropdown.value) {
-            activeDropdown.value = null;
-        }
-    });
-});
 
 // 主题相关状态管理
 const isThemePanelOpen = ref(false);
-const currentTheme = ref('purple'); // 默认主题
+const currentTheme = ref('purple');
+const themeSaved = ref(false);
 
 // 预设主题配置
 const themes = ref([
@@ -248,6 +396,7 @@ const switchTheme = (themeId: string) => {
         currentTheme.value = themeId;
         customColors.value = {...theme.colors};
         applyTheme(theme.colors);
+        themeSaved.value = false;
     }
 };
 
@@ -255,8 +404,93 @@ const switchTheme = (themeId: string) => {
 const updateCustomColor = (key: string, value: string) => {
     customColors.value[key] = value;
     applyTheme(customColors.value);
-    currentTheme.value = 'custom'; // 标记为自定义主题
+    currentTheme.value = 'custom';
+    themeSaved.value = false;
 };
+
+// 保存主题到localStorage
+const saveThemeToLocalStorage = () => {
+    try {
+        const themeData = {
+            currentTheme: currentTheme.value,
+            colors: customColors.value,
+            savedAt: new Date().toISOString()
+        };
+        localStorage.setItem('blogThemeSettings', JSON.stringify(themeData));
+        themeSaved.value = true;
+
+        setTimeout(() => {
+            themeSaved.value = false;
+        }, 2000);
+
+        Message.success(t('theme.saveSuccess'));
+    } catch (error) {
+        console.error('Failed to save theme:', error);
+        Message.error(t('theme.saveError'));
+    }
+};
+
+// 从localStorage加载主题
+const loadThemeFromLocalStorage = () => {
+    try {
+        const savedTheme = localStorage.getItem('blogThemeSettings');
+        if (savedTheme) {
+            const themeData = JSON.parse(savedTheme);
+            currentTheme.value = themeData.currentTheme;
+            customColors.value = themeData.colors;
+            applyTheme(themeData.colors);
+            return true;
+        }
+    } catch (error) {
+        console.error('Failed to load theme:', error);
+    }
+    return false;
+};
+
+// 清除保存的主题
+const clearSavedTheme = () => {
+    localStorage.removeItem('blogThemeSettings');
+    switchTheme('purple');
+    themeSaved.value = false;
+    Message.info(t('theme.clearSuccess'));
+};
+
+// 点击外部关闭搜索结果
+const handleClickOutside = (event: MouseEvent) => {
+    if (searchInputRef.value && !searchInputRef.value.contains(event.target as Node) &&
+        !document.querySelector('.search-results')?.contains(event.target as Node)) {
+        searchResults.value = [];
+        selectedResultIndex.value = -1;
+    }
+};
+
+// 初始化
+onMounted(() => {
+    // 初始化导航状态
+    const initialMatch = findActiveNavItem(router.currentRoute.value.name as string, navItems.value);
+    currentNavItem.value = initialMatch?.label || 'nav.home';
+
+    // 尝试加载保存的主题
+    const themeLoaded = loadThemeFromLocalStorage();
+    if (!themeLoaded) {
+        applyTheme(themes.value[0].colors);
+    }
+
+    // 事件监听
+    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('keydown', handleKeydown);
+    document.addEventListener('click', () => {
+        if (!isMouseOverDropdown.value) {
+            activeDropdown.value = null;
+        }
+    });
+});
+
+// 清理事件监听
+onBeforeUnmount(() => {
+    document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('keydown', handleKeydown);
+});
 </script>
 
 <template>
@@ -399,12 +633,21 @@ const updateCustomColor = (key: string, value: string) => {
                             </div>
                         </div>
 
+                        <!-- 主题操作按钮组 -->
                         <div class="theme-actions">
                             <button
-                                class="reset-button"
-                                @click="switchTheme('purple')"
+                                class="clear-button"
+                                @click="clearSavedTheme"
                             >
-                                {{ t('theme.reset') }}
+                                {{ t('theme.clear') }}
+                            </button>
+                            <button
+                                class="save-button"
+                                @click="saveThemeToLocalStorage"
+                                :class="{ 'saved': themeSaved }"
+                            >
+                                <i class="fas fa-check" v-if="themeSaved"></i>
+                                {{ themeSaved ? t('theme.saved') : t('theme.save') }}
                             </button>
                         </div>
                     </div>
@@ -412,26 +655,27 @@ const updateCustomColor = (key: string, value: string) => {
 
                 <!-- 菜单内容容器 -->
                 <div class="menu-content">
-                    <!-- Logo（艺术字体） -->
+                    <!-- Logo -->
                     <div class="logo" @click="navTo('home')">
                         <span class="logo-text">{{ t('blog.title') }}</span>
                         <span class="logo-sub">Insights</span>
                     </div>
 
-                    <!-- 搜索区域 -->
                     <div class="search-section" @click.stop>
                         <div class="search-wrapper">
+                            <!-- 搜索输入框 -->
                             <input
                                 ref="searchInputRef"
                                 v-model="searchQuery"
                                 type="text"
-                                placeholder="搜索文章、标签或分类..."
+                                :placeholder="t('search.placeholder')"
                                 class="search-input"
                                 @keyup.enter="handleSearch"
                                 :class="{ focused: isSearchExpanded || searchQuery }"
                                 @focus="isSearchExpanded = true"
                                 @blur="!searchQuery && (isSearchExpanded = false)"
                             >
+                            <!-- 搜索按钮等 -->
                             <button class="search-button" @click="handleSearch" aria-label="搜索">
                                 <i class="fas fa-search"></i>
                             </button>
@@ -445,9 +689,78 @@ const updateCustomColor = (key: string, value: string) => {
                             </button>
                             <div class="search-underline" :class="{ expanded: isSearchExpanded || searchQuery }"></div>
                         </div>
+
+                        <!-- 实时搜索结果展示 - 修复条件判断 -->
+                        <transition
+                            enter-active-class="animate__animated animate__fadeIn animate__fast"
+                            leave-active-class="animate__animated animate__fadeOut animate__fast"
+                        >
+                            <div
+                                v-if="(isSearching || searchResults.length > 0) && (isSearchExpanded || searchQuery)"
+                                class="search-results"
+                            >
+                                <!-- 加载状态 -->
+                                <div v-if="isSearching" class="search-loading">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    <span>{{ t('search.searching') }}</span>
+                                </div>
+
+                                <!-- 无结果状态 (仅当不加载且结果为空时) -->
+                                <div v-else-if="searchResults.length === 0" class="search-no-results">
+                                    <i class="fas fa-search"></i>
+                                    <span>{{ t('search.noResults') }}</span>
+                                </div>
+
+                                <!-- 搜索结果列表 -->
+                                <div v-else class="search-results-list">
+                                    <!-- 文章结果分组 -->
+                                    <div v-if="searchResults.some(r => r.type === 'article')" class="results-group">
+                                        <h5 class="results-group-title">{{ t('search.articles') }}</h5>
+                                        <div class="results-group-items">
+                                            <div
+                                                v-for="result in searchResults.filter(r => r.type === 'article')"
+                                                :key="result.id"
+                                                class="search-result-item"
+                                                :class="{ 'selected': selectedResultIndex === searchResults.indexOf(result) }"
+                                                @click="handleResultClick(result)"
+                                            >
+                                                <div class="result-type-icon">
+                                                    <i class="fas fa-file-alt"></i>
+                                                </div>
+                                                <div class="result-content">
+                                                    <div class="result-title" v-html="highlightMatch(result.title, searchQuery)"></div>
+                                                    <div class="result-excerpt" v-html="highlightMatch(result.excerpt, searchQuery)"></div>
+                                                    <div class="result-meta">
+                                                        <i class="fas fa-calendar-alt"></i>
+                                                        <span>{{ result.date }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 标签结果分组 -->
+                                    <div v-if="searchResults.some(r => r.type === 'tag')" class="results-group">
+                                        <!-- 标签展示 -->
+                                    </div>
+
+                                    <!-- 分类结果分组 -->
+                                    <div v-if="searchResults.some(r => r.type === 'category')" class="results-group">
+                                        <!-- 分类展示 -->
+                                    </div>
+
+                                    <!-- 查看全部结果 -->
+                                    <div class="view-all-results">
+                                        <button @click="handleSearch">
+                                            {{ t('search.viewAllResults', { query: searchQuery }) }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </transition>
                     </div>
 
-                    <!-- 主导航项（带特色图标） -->
+                    <!-- 主导航项 -->
                     <nav class="main-nav">
                         <div
                             v-for="item in navItems"
@@ -502,8 +815,9 @@ const updateCustomColor = (key: string, value: string) => {
 </template>
 
 <style scoped lang="scss">
-// 核心变量 - 使用CSS变量实现主题切换
-$transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
+@use '@/assets/style/global.scss' as *;
+// 核心变量
+$transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 
 // 艺术字体核心样式
 @mixin artistic-font {
@@ -519,11 +833,12 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
     top: 1.5rem;
     left: 1.5rem;
     z-index: 1002;
-    width: 48px;
-    height: 48px;
+    @include BoxSize(40px, 40px);
+    cursor: pointer;
     border: none;
     border-radius: 50%;
-    background: rgba(30, 41, 59, 0.9);
+    //background: rgba(30, 41, 59, 0.9);
+    background: rgba(47, 103, 195, 0.9);
     color: var(--text-primary);
     transition: $transition;
     box-shadow: var(--shadow);
@@ -714,23 +1029,50 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
 // 主题操作按钮
 .theme-actions {
     display: flex;
+    gap: 1rem;
     justify-content: flex-end;
     margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.reset-button {
+.save-button {
+    padding: 0.75rem 1.5rem;
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    color: var(--text-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: $transition;
+    @include artistic-font;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    &:hover {
+        background: var(--primary-light);
+        transform: translateY(-2px);
+    }
+
+    &.saved {
+        background: #10b981;
+        border-color: #10b981;
+    }
+}
+
+.clear-button {
     padding: 0.75rem 1.5rem;
     background: transparent;
-    border: 1px solid var(--primary);
-    color: var(--primary);
+    border: 1px solid var(--text-tertiary);
+    color: var(--text-tertiary);
     border-radius: 6px;
     cursor: pointer;
     transition: $transition;
     @include artistic-font;
 
     &:hover {
-        background: var(--primary);
         color: var(--text-primary);
+        border-color: var(--text-primary);
         transform: translateY(-2px);
     }
 }
@@ -747,11 +1089,11 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
         top: 1.5rem;
         right: 1.5rem;
         z-index: 1001;
-        width: 48px;
-        height: 48px;
+        @include BoxSize(36px, 36px);
         border: none;
         border-radius: 50%;
-        background: rgba(30, 41, 59, 0.9);
+        //background: rgba(30, 41, 59, 0.9);
+        background: rgba(170, 192, 223, 0.9);
         color: var(--text-primary);
         transition: $transition;
         box-shadow: var(--shadow);
@@ -809,7 +1151,7 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
         position: relative;
     }
 
-    // Logo（艺术字体）
+    // Logo
     .logo {
         display: flex;
         align-items: center;
@@ -860,11 +1202,12 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
         }
     }
 
-    // 搜索区域
+    // 搜索区域 - 带实时检索样式
     .search-section {
         width: 100%;
         max-width: 600px;
         padding: 1rem 0;
+        position: relative;
 
         .search-wrapper {
             position: relative;
@@ -961,6 +1304,149 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
                 height: 2px;
             }
         }
+
+        // 实时搜索结果样式
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-overlay);
+            border-radius: 8px;
+            margin-top: 8px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1005;
+            overflow: hidden;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .search-loading, .search-no-results {
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+
+            i {
+                font-size: 1.2rem;
+                color: var(--primary-light);
+            }
+        }
+
+        .search-results-list {
+            padding: 0.5rem 0;
+        }
+
+        .results-group {
+            margin-bottom: 1rem;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .results-group-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-tertiary);
+            margin: 0 0 0.5rem 1.5rem;
+            padding-top: 0.5rem;
+        }
+
+        .results-group-items {
+            padding: 0 0.5rem;
+        }
+
+        .search-result-item {
+            padding: 0.8rem 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            cursor: pointer;
+            transition: $transition;
+
+            &:hover {
+                background: var(--bg-highlight);
+            }
+
+            &.selected {
+                background: rgba(124, 58, 237, 0.2);
+            }
+
+            .result-type-icon {
+                margin-top: 0.25rem;
+                color: var(--primary-light);
+                width: 1.5rem;
+                text-align: center;
+            }
+
+            .result-content {
+                flex: 1;
+            }
+
+            .result-title {
+                color: var(--text-primary);
+                margin-bottom: 0.25rem;
+                @include artistic-font;
+
+                .highlight {
+                    color: var(--accent);
+                    font-weight: bold;
+                    text-decoration: underline;
+                    text-underline-offset: 2px;
+                }
+            }
+
+            .result-excerpt {
+                font-size: 0.9rem;
+                color: var(--text-secondary);
+                margin-bottom: 0.25rem;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+
+                .highlight {
+                    color: var(--primary-light);
+                    font-weight: bold;
+                }
+            }
+
+            .result-meta {
+                font-size: 0.8rem;
+                color: var(--text-tertiary);
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+
+                i {
+                    font-size: 0.75rem;
+                }
+            }
+        }
+
+        .view-all-results {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+
+            button {
+                background: transparent;
+                border: none;
+                color: var(--primary-light);
+                cursor: pointer;
+                transition: $transition;
+                @include artistic-font;
+
+                &:hover {
+                    color: var(--primary);
+                    transform: scale(1.05);
+                }
+            }
+        }
     }
 
     // 主导航菜单
@@ -987,7 +1473,7 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
     .nav-link {
         display: inline-flex;
         align-items: center;
-        gap: 0.8rem; // 图标与文字间距
+        gap: 0.8rem;
         padding: 0.9rem 1.5rem;
         color: var(--text-secondary);
         font-size: 1.15rem;
@@ -995,11 +1481,10 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
         transition: $transition;
         @include artistic-font;
 
-        // 菜单项图标样式
         .nav-icon {
             color: var(--primary-light);
             font-size: 1.25rem;
-            width: 1.5rem; // 图标固定宽度，确保对齐
+            width: 1.5rem;
             transition: $transition;
         }
 
@@ -1064,7 +1549,6 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
             border-left: 1px solid rgba(124, 58, 237, 0.2);
         }
 
-        // 子菜单项
         .dropdown-item {
             display: flex;
             align-items: center;
@@ -1076,7 +1560,6 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
             font-size: 1rem;
             @include artistic-font;
 
-            // 子项图标
             .sub-icon {
                 color: var(--text-tertiary);
                 font-size: 1rem;
@@ -1097,7 +1580,7 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
         }
     }
 
-    // 底部信息（艺术字体）
+    // 底部信息
     .menu-footer {
         padding: 2rem 0 1rem;
         color: var(--text-tertiary);
@@ -1172,6 +1655,10 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); // 流畅过渡
 
     .dropdown-menu {
         min-width: 180px !important;
+    }
+
+    .search-results {
+        max-height: 300px;
     }
 }
 
