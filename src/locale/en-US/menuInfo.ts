@@ -56,5 +56,21 @@ export default {
     "theme.primaryLight": "Light Primary",
     "theme.accent": "Accent Color",
     "theme.bgOverlay": "Background Color",
-    "theme.reset": "Reset to Default"
+    "theme.reset": "Reset to Default",
+    "theme.save": "Save Theme",
+    "theme.saved": "Saved",
+    "theme.clear": "Clear Settings",
+    "theme.savedSuccess": "Theme settings saved successfully",
+    "theme.savedError": "Failed to save theme, please try again",
+    "theme.clearSuccess": "Saved theme settings have been cleared",
+
+    "search.placeholder": "Search articles, tags or categories...",
+    "search.searching": "Searching...",
+    "search.noResults": "No matching results found",
+    "search.articles": "Articles",
+    "search.tags": "Tags",
+    "search.categories": "Categories",
+    "search.articlesCount": "{count} articles",
+    "search.viewAllResults": "View all results for '{query}'",
+    "search.error": "Search error, please try again later"
 }

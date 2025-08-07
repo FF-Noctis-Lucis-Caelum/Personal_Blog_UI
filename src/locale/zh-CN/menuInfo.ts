@@ -56,5 +56,21 @@ export default {
     "theme.primaryLight": "浅色主调",
     "theme.accent": "强调色",
     "theme.bgOverlay": "背景色",
-    "theme.reset": "重置为默认"
+    "theme.reset": "重置为默认",
+    "theme.save": "保存主题",
+    "theme.saved": "已保存",
+    "theme.clear": "清除设置",
+    "theme.savedSuccess": "主题设置保存成功",
+    "theme.savedError": "主题保存失败，请重试",
+    "theme.clearSuccess": "已清除保存的主题设置",
+
+    "search.placeholder": "搜索文章、标签或分类...",
+    "search.searching": "正在搜索...",
+    "search.noResults": "没有找到匹配的结果",
+    "search.articles": "文章",
+    "search.tags": "标签",
+    "search.categories": "分类",
+    "search.articlesCount": "{count} 篇文章",
+    "search.viewAllResults": "查看所有关于「{query}」的结果",
+    "search.error": "搜索出错，请稍后重试"
 }
