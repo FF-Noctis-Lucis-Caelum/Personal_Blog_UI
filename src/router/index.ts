@@ -72,6 +72,9 @@ router.beforeEach((to, from, next) => {
         loadingCacheStore = useLoadingCacheStore()
     }
 
+    // 1. 不需要登录的页面直接放行
+    if (!to.meta.requiresAuth) return next();
+
     currentRouteNeedWait = to.meta.waitForMount === true
     console.log('当前路由是否需要等待挂载:', currentRouteNeedWait)
 
