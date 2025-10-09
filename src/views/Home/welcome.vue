@@ -1,6 +1,6 @@
 <template>
     <div class="WelComeBox">
-        <MagicRouter />
+        <MagicRouter @toggle-hidden="handleToggleHidden"  />
         <!-- 背景容器（限制显示区域） -->
         <div class="container">
             <!-- 内部背景盒子（用于偏移的元素） -->
@@ -8,7 +8,7 @@
                 ref="backgroundRef"
                 class="bg_img"
                 :style="{
-                    transform: `scale(1.1) translate(${-offsetX}px, ${-offsetY}px)`,
+                    transform: !isHidden ? `scale(1.1) translate(${-offsetX}px, ${-offsetY}px)` : 'none',
                 }"
             />
             <!--   左侧阴影         -->
@@ -24,7 +24,7 @@
         </div>
 
         <!-- 镜头效果 -->
-        <div class="lens-effect" />
+        <div :style="{display: isHidden ? 'none' : 'block'}" class="lens-effect" />
 
     </div>
 </template>
@@ -37,7 +37,6 @@ import { useLoading } from '@/hooks/CyLoading'
 import {useRoute} from "vue-router";
 import {useLoadingCacheStore} from "@/store/modules/loading/LoadingCache";
 import MagicRouter from "@/views/Home/components/magicRouter.vue";
-
 const route = useRoute()
 const { hideLoading } = useLoading()
 const loadingCacheStore = useLoadingCacheStore()
@@ -50,14 +49,25 @@ const bgSizeRatio = 1.1 // 背景图片比视口大10% - 比原来幅度小
 dayjs.locale('zh-cn');
 const curTime = ref(dayjs(new Date()).format('YYYY-MM-DD HH:mm:ss'))
 // 处理鼠标移动
+// 处理鼠标移动 - 修改部分：减小放大倍数并添加平滑过渡
 const handleMouseMove = (e) => {
     // 计算鼠标在视口中的相对位置
     const xPercent = e.clientX / window.innerWidth - 0.5
     const yPercent = e.clientY / window.innerHeight - 0.5
 
-    // 计算偏移量（幅度已减小）
-    offsetX.value = xPercent * maxOffset * 2
-    offsetY.value = yPercent * maxOffset * 2
+    // 减小放大倍数（从8改为2-3），使移动更缓慢
+    const speedFactor = 4.5; // 可根据需要调整这个值
+    const targetX = xPercent * maxOffset * speedFactor
+    const targetY = yPercent * maxOffset * speedFactor
+
+    // 添加平滑过渡效果 - 只移动一部分距离，而不是直接跳到目标值
+    offsetX.value += (targetX - offsetX.value) * 0.1; // 0.15是缓动系数，值越小越平滑
+    offsetY.value += (targetY - offsetY.value) * 0.1;
+}
+
+const isHidden = ref(false);  // 初始隐藏
+const handleToggleHidden = (newVal: boolean) => {
+    isHidden.value = !newVal;
 }
 
 // 设置背景尺寸

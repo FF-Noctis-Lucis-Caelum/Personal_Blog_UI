@@ -13,6 +13,8 @@
         .bg_img {
             @include Absolute();
             z-index: 1;
+            // 添加过渡效果
+            transition: transform .5s ease-out; // 平滑过渡
             @include Back('@/assets/images/back/bg1.png');
         }
         .trapezoid {
