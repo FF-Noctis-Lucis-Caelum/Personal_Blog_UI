@@ -13,6 +13,8 @@
         .bg_img {
             @include Absolute();
             z-index: 1;
+            // 添加过渡效果
+            transition: transform .5s ease-out; // 平滑过渡
             @include Back('@/assets/images/back/bg1.png');
         }
         .trapezoid {
@@ -45,6 +47,53 @@
                 }
                 .text:hover {
                     text-decoration: underline solid #fff 2px;
+                }
+            }
+        }
+    }
+
+    // 断点1：中屏（平板横屏，1000px以下）
+    @media screen and (max-width: 1000px) {
+        .container .trapezoid {
+            @include SizeSet(100%, 100%); // 中屏适当加宽
+            clip-path: none; // 变回矩形
+            padding: 5rem 0 0 3rem; // 减少内边距
+
+            .epigram {
+                margin-top: 25vh; // 减少顶部距离
+                margin-left: 5vw; // 减少左距
+                width: 70%; // 内容占比加大，避免过窄
+                gap: 2rem; // 缩小间距
+
+                .text {
+                    font-size: 2.2rem; // 字体稍小
+                }
+            }
+        }
+    }
+
+    // 断点2：小屏（平板竖屏/手机，768px以下）
+    @media screen and (max-width: 768px) {
+        .container {
+            .trapezoid {
+                @include SizeSet(100%, 100%); // 小屏占满宽度
+                padding: 3rem 0 0 2rem; // 进一步减少内边距
+
+                .epigram {
+                    margin-top: 60vh; // 顶部距离再减
+                    margin-left: 3vw; // 左距最小化
+                    width: 90%; // 内容几乎占满
+                    gap: 1.5rem; // 间距更紧凑
+
+                    .Author {
+                        font-size: 1.5rem;
+                    }
+                    .text {
+                        font-size: 1.8rem;
+                    }
+                    .timeLine, .subText {
+                        font-size: 1rem;
+                    }
                 }
             }
         }
