@@ -70,8 +70,11 @@ const findActiveNavItem = (routeName: string, items: any[]): any => {
 
 // 折叠状态
 const isCollapsed = ref(true);
+// 定义发射的事件
+const emit = defineEmits(['toggle-hidden'])
 const changeCollapsed = () => {
     isCollapsed.value = !isCollapsed.value;
+    emit('toggle-hidden', isCollapsed.value);
     if (isCollapsed.value) {
         isSearchExpanded.value = false;
         searchQuery.value = '';
@@ -501,6 +504,7 @@ onBeforeUnmount(() => {
             :class="{ 'is-active': !isCollapsed }"
             @click="changeCollapsed"
             aria-label="切换菜单"
+            :style="{ display: !isThemePanelOpen ? 'flex' : 'none'}"
         >
             <i class="fas fa-bars" v-if="isCollapsed"></i>
             <i class="fas fa-times" v-else></i>
@@ -774,12 +778,12 @@ onBeforeUnmount(() => {
                                 @mouseleave="hideDropdown"
                                 @click="!item.children && navTo(item.name)"
                             >
-                <span class="nav-link" :class="{ active: currentNavItem === item.label }">
-                    <!-- 菜单项图标 -->
-                    <i class="fas nav-icon" :class="item.icon"></i>
-                    {{ t(item.label) }}
-                    <i class="fas fa-chevron-down dropdown-indicator" v-if="item.children"></i>
-                </span>
+                                <span class="nav-link" :class="{ active: currentNavItem === item.label }">
+                                    <!-- 菜单项图标 -->
+                                    <i class="fas nav-icon" :class="item.icon"></i>
+                                    {{ t(item.label) }}
+                                    <i class="fas fa-chevron-down dropdown-indicator" v-if="item.children"></i>
+                                </span>
                             </div>
 
                             <!-- 下拉菜单（带子项图标） -->
@@ -1129,15 +1133,15 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         right: 0;
         bottom: 0;
         z-index: 1000;
-        background: var(--bg-overlay);
+        background: rgba(15, 23, 42, 0.87);
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 2rem;
-        background-image:
-            radial-gradient(circle at 20% 30%, rgba(124, 58, 237, 0.1) 0%, transparent 20%),
-            radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.1) 0%, transparent 20%);
+        //background-image:
+        //    radial-gradient(circle at 20% 30%, rgba(124, 58, 237, 0.1) 0%, transparent 20%),
+        //    radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.1) 0%, transparent 20%);
     }
 
     // 菜单内容容器
@@ -1443,7 +1447,7 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 
                 &:hover {
                     color: var(--primary);
-                    transform: scale(1.05);
+                    //transform: scale(1.05);
                 }
             }
         }
@@ -1501,7 +1505,7 @@ $transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
         &:hover:not(.active) {
             color: var(--text-primary);
             background: rgba(255, 255, 255, 0.07);
-            transform: translateY(-5px) scale(1.02);
+            //transform: translateY(-5px) scale(1.02);
 
             .nav-icon {
                 color: var(--primary);
