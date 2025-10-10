@@ -110,6 +110,9 @@ importers:
       unplugin-vue-components:
         specifier: ^29.1.0
         version: 29.1.0(@babel/parser@7.28.4)(vue@3.5.22(typescript@5.9.3))
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
       vite-plugin-compression:
         specifier: ^0.5.1
         version: 0.5.1(vite@7.1.9(@types/node@24.7.0)(less@4.4.2)(sass@1.93.2)(yaml@2.8.1))
@@ -4075,6 +4078,10 @@ packages:
 
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+  uuid@13.0.0:
+    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
+    hasBin: true
 
   uuid@3.4.0:
     resolution: {integrity: sha512-HjSDRw6gZE5JMggctHBcjVak08+KEVhSIiDzFnT9S9aegmp85S/bReBVTb4QTFaRNptJ9kuYaNhnbNEOkbKb/A==}
@@ -8308,6 +8315,8 @@ snapshots:
   url-to-options@1.0.1: {}
 
   util-deprecate@1.0.2: {}
+
+  uuid@13.0.0: {}
 
   uuid@3.4.0: {}
 
