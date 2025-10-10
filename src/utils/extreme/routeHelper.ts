@@ -1,5 +1,5 @@
 import { Router, RouteLocationRaw, RouteLocationNormalized } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import {Message} from "@arco-design/web-vue";
 import { logger } from './logger';
 
 interface LinkOptions {
@@ -8,14 +8,27 @@ interface LinkOptions {
     onSuccess?: (to: RouteLocationNormalized) => void;
     onError?: (error: Error, type: 'validation' | 'navigation' | 'beforeJump') => void;
     showError?: boolean;
-    errorMessage?: string;
+    // 为不同错误类型提供更细致的自定义消息
+    errorMessages?: {
+        validation?: string;    // 路由不存在时的消息
+        navigation?: string;    // 导航失败时的消息
+        beforeJump?: string;    // 前置钩子阻止时的消息
+        timeout?: string;       // 超时时的消息
+    };
     timeout?: number;
 }
 
+// 默认配置增强：提供更友好的用户提示
 const DEFAULT_OPTIONS: LinkOptions = {
     replace: false,
     showError: true,
-    timeout: 5000
+    timeout: 5000,
+    errorMessages: {
+        validation: '抱歉，该页面不存在或已被移除',
+        navigation: '页面跳转失败，请稍后重试',
+        beforeJump: '操作被阻止，请检查相关条件',
+        timeout: '页面跳转超时，请稍后重试'
+    }
 };
 
 function validateRoute(router: Router, to: RouteLocationRaw): boolean {
@@ -33,7 +46,17 @@ export function linkPage(
     to: RouteLocationRaw,
     options: LinkOptions = {}
 ): Promise<RouteLocationNormalized> {
-    const config = { ...DEFAULT_OPTIONS, ...options };
+    // 合并配置，确保错误消息有合理默认值
+    const config = {
+        ...DEFAULT_OPTIONS,
+        ...options,
+        errorMessages: {
+            ...DEFAULT_OPTIONS.errorMessages,
+            ...options.errorMessages
+        }
+    };
+
+    const fromRoute = router.currentRoute.value;
 
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -42,76 +65,94 @@ export function linkPage(
 
     return new Promise<RouteLocationNormalized>(async (resolve, reject) => {
         try {
+            // 前置钩子验证
             if (config.beforeJump) {
                 const canJump = await config.beforeJump();
                 if (!canJump) {
                     const error = new Error('Navigation aborted by beforeJump hook');
                     config.onError?.(error, 'beforeJump');
+
+                    // 前置钩子阻止时的用户提示
+                    if (config.showError) {
+                        Message.error(config.errorMessages?.beforeJump || '操作无法完成');
+                    }
+
                     return reject(error);
                 }
             }
 
+            // 路由存在性验证
             if (!validateRoute(router, to)) {
-                const error = new Error(config.errorMessage || 'Route does not exist');
+                const error = new Error(config.errorMessages?.validation || 'Route does not exist');
                 config.onError?.(error, 'validation');
 
+                // 路由不存在时的用户提示（关键增强）
                 if (config.showError) {
-                    ElMessage.error(error.message);
+                    Message.error(config.errorMessages?.validation);
                 }
 
                 return reject(error);
             }
 
+            // 超时/中断处理
             abortController.signal.addEventListener('abort', (event) => {
-                const error = event.target instanceof ErrorEvent ? event.target.error : new Error('Navigation aborted');
-                logger.error('Navigation aborted', { to, error });
+                const error = event.target instanceof ErrorEvent
+                    ? event.target.error
+                    : new Error('Navigation aborted');
+
+                logger.error('Navigation aborted', { to, error, from: fromRoute.fullPath });
                 config.onError?.(error as Error, 'navigation');
 
+                // 超时时的用户提示
                 if (config.showError) {
-                    ElMessage.error('Navigation timed out or aborted');
+                    Message.error(config.errorMessages?.timeout);
                 }
 
                 reject(error);
             });
 
+            // 执行导航
             let navigationPromise: Promise<RouteLocationNormalized | void>;
-
             if (config.replace) {
                 navigationPromise = router.replace(to);
             } else {
                 navigationPromise = router.push(to);
             }
 
-            // 等待跳转完成 - 关键修复：处理可能的undefined返回值
+            // 等待导航完成
             const toRoute = await navigationPromise;
-
-            // 清除超时
             clearTimeout(timeoutId);
 
-            // 关键修复：使用当前路由作为备选，确保路由信息可用
             const finalToRoute = toRoute || router.currentRoute.value;
 
-            // 记录成功日志 - 增加安全检查
             logger.info('Navigation successful', {
-                from: router.currentRoute.value?.fullPath,
-                to: finalToRoute?.fullPath
+                from: fromRoute.fullPath,
+                to: finalToRoute.fullPath
             });
 
-            // 执行成功回调
             config.onSuccess?.(finalToRoute);
-
             resolve(finalToRoute);
 
         } catch (error) {
             clearTimeout(timeoutId);
 
             const navError = error instanceof Error ? error : new Error(String(error));
-            logger.error('Navigation failed', { to, error: navError });
+            logger.error('Navigation failed', {
+                from: fromRoute.fullPath,
+                to,
+                error: navError
+            });
 
             config.onError?.(navError, 'navigation');
 
+            // 导航过程中出错的用户提示
             if (config.showError) {
-                ElMessage.error(config.errorMessage || navError.message || 'Failed to navigate');
+                // 优先使用自定义消息，其次使用错误对象的消息，最后使用默认消息
+                const errorMessage =
+                    config.errorMessages?.navigation ||
+                    navError.message ||
+                    '页面跳转发生错误';
+                Message.error(errorMessage);
             }
 
             reject(navError);
@@ -129,16 +170,26 @@ export function goTo(
 
 export function goBack(
     router: Router,
-    fallback: RouteLocationRaw = '/'
+    fallback: RouteLocationRaw = '/',
+    fallbackMessage = '已经是首页了'
 ): Promise<RouteLocationNormalized> {
+    const fromRoute = router.currentRoute.value;
+
     if (router.history.index > 0) {
         return new Promise(resolve => {
             router.back();
             setTimeout(() => {
-                resolve(router.currentRoute.value);
+                const toRoute = router.currentRoute.value;
+                logger.info('Navigation back successful', {
+                    from: fromRoute.fullPath,
+                    to: toRoute.fullPath
+                });
+                resolve(toRoute);
             }, 0);
         });
     } else {
+        // 返回失败时的用户提示
+        Message.info(fallbackMessage);
         return goTo(router, fallback);
     }
 }

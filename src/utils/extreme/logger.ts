@@ -192,7 +192,7 @@ export class Logger {
 
         // 错误级别以上立即上报
         if (['error', 'fatal'].includes(log.level) && this.config.reportUrl) {
-            this.reportLogs();
+            this.reportLogs().then();
         }
     }
 
@@ -224,7 +224,7 @@ export class Logger {
         if (!this.config.reportUrl) return;
 
         this.reportTimer = window.setInterval(() => {
-            this.reportLogs();
+            this.reportLogs().then();
         }, this.config.reportInterval);
     }
 
@@ -352,7 +352,7 @@ export class Logger {
             clearInterval(this.reportTimer);
         }
         // 最后一次上报
-        this.reportLogs();
+        this.reportLogs().then();
     }
 }
 
