@@ -34,7 +34,8 @@
         "noUnusedParameters": true,
         "erasableSyntaxOnly": true,
         "noFallthroughCasesInSwitch": true,
-        "noUncheckedSideEffectImports": true
+        "noUncheckedSideEffectImports": true,
+        "types": ["node", "vite/client"] // 确保包含 Node 和 Vite 类型
     },
     /* Node环境包含的文件（仅Vite配置文件，避免混入应用代码） */
     "include": [

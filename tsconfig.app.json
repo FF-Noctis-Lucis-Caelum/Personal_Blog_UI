@@ -16,7 +16,8 @@
         "noUnusedParameters": true,
         "erasableSyntaxOnly": true,
         "noFallthroughCasesInSwitch": true,
-        "noUncheckedSideEffectImports": true
+        "noUncheckedSideEffectImports": true,
+        "types": ["vite/client", "vue"] // 确保包含 Vue 和 Vite 类型
     },
     "include": [
         "src/**/*.ts",
