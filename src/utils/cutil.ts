@@ -1,11 +1,3 @@
-import router from '@/router'
-
-export function goto(path: string) {
-    router.push({
-        name: path
-    }).then()
-}
-
 export function formatTime (timestamp: number): string {
     if (!timestamp) return '';
 
@@ -48,10 +40,6 @@ export function formatTimestamps (obj: any): any {
  * @returns {Object} 包含 str1（含起止标记的子串）和 str2（剩余部分）的对象
  */
 export function splitByMarkers(str: string, startStr: string, endStr: string): { think: string; answer: string } {
-    // 处理空输入
-    if (typeof str !== 'string' || typeof startStr !== 'string' || typeof endStr !== 'string') {
-        return { think: '', answer: str };
-    }
 
     const startLen = startStr.length;
     const endLen = endStr.length;
