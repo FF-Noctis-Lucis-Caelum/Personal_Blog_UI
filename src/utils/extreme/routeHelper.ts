@@ -1,5 +1,5 @@
 import { Router, RouteLocationRaw, RouteLocationNormalized } from 'vue-router';
-import {Message} from "@arco-design/web-vue";
+import { ElMessage as Message } from 'element-plus';
 import { logger } from './logger';
 
 interface LinkOptions {
