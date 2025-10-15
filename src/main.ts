@@ -39,6 +39,10 @@ import router from './router'
 // 水豚加载器
 import CapybaraLoading from "@/components/cute/CapybaraLoading.vue";
 
+// 引入element-plus
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+
 // 根据你的i18n全局语言动态切换
 
 const app = createApp(App)
@@ -55,6 +59,7 @@ app.config.globalProperties.$echarts = echarts;
 app.use(ArcoVue, {
     locale: zhCN,
 })
+app.use(ElementPlus)
 app.use(ArcoVueIcon)
 app.use(router)
 app.use(store)
