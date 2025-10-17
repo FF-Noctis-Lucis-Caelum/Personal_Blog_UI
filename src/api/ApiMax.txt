@@ -1,0 +1,631 @@
+import type { StrictUseAxiosReturn, UseAxiosOptions } from '@vueuse/integrations/useAxios'
+import { baseConfig } from '@/config.ts'
+import { Notify } from '@/utils/notification'
+import { useAxios } from '@vueuse/integrations/useAxios'
+
+import axios, {
+  type AxiosError,
+  type AxiosRequestConfig,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+  type Method,
+} from 'axios'
+import { computed, getCurrentInstance, nextTick, onUnmounted, ref } from 'vue'
+
+// -------------------------- 创建新的独立axios实例 + 全局拦截器 --------------------------
+/**
+ * 新请求实例：仅服务于useApiRequest，与老service.ts完全隔离
+ * 复现老service.ts的所有核心逻辑（基础配置、拦截器）
+ */
+export const NewService = axios.create({
+  timeout: 50000, // 与老Service一致：50秒超时
+  baseURL: baseConfig.baseUrl, // 复用项目基础URL
+  method: 'POST', // 默认POST，与老Service一致
+  headers: {
+    // 复现老Service的默认请求头，优先级：用户传入 > 实例默认
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'X-Client-Type': 'axios',
+  },
+})
+
+/**
+ * 新请求拦截器
+ */
+NewService.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  return config
+}, (error) => {
+  return Promise.reject(error)
+})
+
+/**
+ * 新响应拦截器
+ */
+NewService.interceptors.response.use(
+  (response: AxiosResponse) => {
+    // 登录失效处理
+    const businessData = response.data
+    if (businessData?.status === -1 && window.WWWURL) {
+      const referer = encodeURIComponent(location.href)
+      window.location.href = `${window.WWWURL}/user/login?referer=${referer}`
+    }
+
+    return response.data
+  },
+  (err: AxiosError) => {
+    if (err.response) {
+      // 可补充老项目的handleNetworkError逻辑（如404/500页面跳转）
+      // handleNetworkError(err.response.status)
+      return Promise.reject(err.response)
+    }
+    return Promise.reject(err)
+  },
+)
+
+// 定义通用的API响应结构
+export interface ApiResponse<T = any> {
+  status: number // 业务状态码：1成功，-1登录失效，其他错误
+  info: string
+  data: T
+}
+
+// 定义请求选项
+export interface ApiRequestOptions<T = any, D = any> extends Omit<UseAxiosOptions<ApiResponse<T>>, 'immediate'> {
+  /** 请求URL（必填） */
+  url: string
+  /** 请求方法 */
+  method?: Method
+  /** URL查询参数 */
+  params?: Record<string, any>
+  /** 请求体数据 */
+  data?: D
+  /** 基础URL */
+  baseURL?: string
+  /** 请求头 */
+  headers?: AxiosRequestConfig['headers']
+  /** 是否立即执行请求 */
+  immediate?: boolean
+  /** 是否禁用默认错误处理 */
+  disableErrorHandling?: boolean
+  /** 是否启用gzip压缩 */
+  enableGzip?: boolean
+  /** 请求前拦截器 */
+  beforeRequest?: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>
+  /** 响应拦截器 */
+  afterResponse?: (response: AxiosResponse<ApiResponse<T>>) => AxiosResponse<ApiResponse<T>> | Promise<AxiosResponse<ApiResponse<T>>>
+  /** 错误处理函数 */
+  errorHandler?: (error: AxiosError<ApiResponse<T>>) => void
+  /** 最大重试次数（默认0次，不重试） */
+  maxRetries?: number
+  /** 重试延迟时间（毫秒，默认1000ms） */
+  retryDelay?: number
+  /** 是否在重试时显示加载状态 */
+  showRetryLoading?: boolean
+  /** 是否启用指数退避（默认true）：重试延迟随次数翻倍，减轻服务器压力 */
+  enableExponentialBackoff?: boolean
+  /** 指数退避增长倍数（默认1.5）：1.5=每次×1.5，2=每次×2，1=固定延迟 */
+  backoffMultiplier?: number
+  /** 最大重试延迟（毫秒，默认10000ms=10秒）：防止指数退避导致延迟过长 */
+  maxRetryDelay?: number
+  /** 是否启用随机抖动（默认true）：延迟叠加随机值，避免重试风暴 */
+  enableJitter?: boolean
+  /** 抖动范围（毫秒，默认300ms）：延迟会在 [-jitterRange, +jitterRange] 内波动 */
+  jitterRange?: number
+  /** 可重试的HTTP状态码列表（默认[500,502,503,504]） */
+  retryStatusCodes?: number[]
+  /** 是否启用调试日志 */
+  enableLog?: boolean
+  /** 连续失败熔断阈值（默认5次） */
+  maxConsecutiveFailures?: number
+}
+
+// 默认请求配置
+const DEFAULT_CONFIG: Partial<ApiRequestOptions> = {
+  method: 'POST',
+  immediate: false,
+  disableErrorHandling: false,
+  enableGzip: false,
+  maxRetries: 0,
+  retryDelay: 1000,
+  showRetryLoading: false,
+  enableExponentialBackoff: true,
+  backoffMultiplier: 1.5, // 默认×1.5，比×2平缓
+  maxRetryDelay: 5000, // 最大延迟5秒
+  enableJitter: true,
+  jitterRange: 300, // 抖动±300毫秒
+  retryStatusCodes: [500, 502, 503, 504], // 常见可重试5xx状态码
+  enableLog: false, // 默认关闭调试日志
+  maxConsecutiveFailures: 5, // 连续失败5次后熔断
+}
+
+// 定义execute方法的统一返回类型
+interface ExecuteResult<T, D> {
+  // 业务数据
+  data: T
+  rawData: ApiResponse<T> | undefined
+  response: AxiosResponse<ApiResponse<T>>
+  // 状态标识
+  status: number
+  info: string
+  isSuccess: boolean // 严格对应业务成功（status === 1）
+  isLoading: boolean
+  isFinished: boolean
+  isAborted: boolean
+  isReady: boolean
+  isRetryWaiting: boolean
+  // 错误信息
+  error: AxiosError<ApiResponse<T>> | undefined | null
+  errorMessage: string
+  // 重试相关
+  retryCount: number
+  consecutiveFailures: number // 连续失败次数（用于熔断）
+  // 原始结果（兼容用）
+  originalResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> | null
+}
+
+// 新增：安全响应类型定义（替代any）
+type SafeAxiosResponse<T> = AxiosResponse<ApiResponse<T>> & {
+  info: string
+  data: T | null
+  status: number
+}
+
+/**
+ * 重构后的通用API请求Hook
+ * 提供更清晰的配置和更好的扩展性
+ */
+export function useApiRequest<T = any, D = any>(
+  url: string,
+  options: Omit<ApiRequestOptions<T, D>, 'url'> = {},
+) {
+  // 合并配置，确保url存在
+  const config = { ...DEFAULT_CONFIG, ...options }
+  const currentInstance = getCurrentInstance()
+  // 重试计数器
+  const retryCount = ref(0)
+  // 连续失败计数器（用于熔断）
+  const consecutiveFailures = ref(0)
+  // 最终就绪状态（请求完成且不再重试）
+  const isReady = ref(false)
+  // 重试等待状态（延迟期间为true）
+  const isRetryWaiting = ref(false)
+
+  // 熔断恢复计时器
+  const resetFailureTimer = ref<NodeJS.Timeout | null>(null)
+  const resetConsecutiveFailures = () => {
+    if (resetFailureTimer.value) {
+      clearTimeout(resetFailureTimer.value)
+    }
+    resetFailureTimer.value = setTimeout(() => {
+      consecutiveFailures.value = 0
+      if (config.enableLog) {
+        console.log('[useApiRequest] 熔断状态已恢复')
+      }
+    }, 30000) // 30秒后自动恢复熔断
+  }
+
+  // 基础默认headers
+  const baseHeaders: AxiosRequestConfig['headers'] = {
+    'Access-Control-Allow-Origin': '*',
+    'X-Client-Type': 'axios',
+    'Content-Type': 'application/json',
+    ...(config.enableGzip ? { 'Accept-Encoding': 'gzip, deflate, br' } : {}),
+  }
+
+  const mergedHeaders = deepMergeHeaders(baseHeaders, config.headers)
+
+  // 创建请求配置
+  const requestConfig: AxiosRequestConfig<D> = {
+    url,
+    method: config.method,
+    params: config.params,
+    data: config.data,
+    baseURL: config.baseURL,
+    headers: mergedHeaders,
+  }
+
+  // 创建请求实例
+  const axiosResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> = useAxios<ApiResponse<T>, ApiResponse<T>, D>(
+    url,
+    requestConfig,
+    NewService, // 直接使用Service实例
+    {
+      immediate: false, // 延迟执行，手动控制immediate
+      ...config,
+    },
+  )
+
+  // 从useAxios结果中提取所需属性
+  const {
+    data: rawData,
+    response: originalResponse,
+    isLoading,
+    isFinished,
+    isAborted,
+    error: requestError,
+    execute: originalExecute,
+    abort: originalAbort,
+    cancel: originalCancel,
+  } = axiosResult
+
+  // 定义“安全响应”计算属性，确保永远不为undefined
+  // 即使后端无响应，也返回一个默认的AxiosResponse结构
+  const safeResponse = computed<SafeAxiosResponse<T>>(() => {
+    // 如果原始response存在，直接返回完整的AxiosResponse
+    if (originalResponse.value) {
+      return originalResponse.value as SafeAxiosResponse<T>
+    }
+
+    // 处理“无响应”的边界情况（如网络错误、请求中断等）
+    return {
+      info: requestError.value
+        ? `请求异常: ${requestError.value}`
+        : '未收到响应',
+      data: null as unknown as T,
+      status: 0, // HTTP状态码：0表示无响应
+      statusText: '',
+      headers: {},
+      config: requestConfig,
+      request: null,
+    } as SafeAxiosResponse<T>
+  })
+
+  // 提取业务数据
+  const data = computed<T>(() => {
+    return safeResponse.value.status === 1 && safeResponse.value.data
+      ? safeResponse.value.data
+      : ({} as T)
+  })
+
+  // 业务状态和信息
+  const status = computed(() => safeResponse.value.status)
+  const info = computed(() => safeResponse.value.info)
+
+  // 新增“是否请求成功”的状态（用于外部判断）
+  const isSuccess = computed(() => status.value === 1 && !!data.value)
+
+  // 错误信息
+  const errorMessage = computed(() => {
+    if (requestError.value) {
+      const axiosError = requestError.value as AxiosError<ApiResponse<T>>
+      // 网络错误细分
+      if (!axiosError.response) {
+        if (axiosError.code === 'ECONNABORTED') {
+          return '请求超时，请稍后重试'
+        }
+        if (axiosError.code === 'ERR_NETWORK') {
+          return '网络连接失败，请检查网络'
+        }
+        if (axiosError.name === 'CanceledError') {
+          return '请求已取消'
+        }
+        return '网络请求异常'
+      }
+      // 服务端错误
+      return axiosError.response.data?.info || axiosError.message || '请求发生错误'
+    }
+    return ''
+  })
+
+  // 加载状态（支持隐藏重试加载）
+  const isLoadingRetry = computed(() => {
+    return isLoading.value && (config.showRetryLoading || retryCount.value === 0)
+  })
+
+  // 统一返回结果生成函数（消除代码冗余）
+  const getExecuteResult = (
+    originalResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> | null,
+    error: AxiosError<ApiResponse<T>> | undefined | null,
+  ): ExecuteResult<T, D> => ({
+    data: data.value,
+    rawData: rawData.value,
+    response: safeResponse.value,
+    status: status.value,
+    info: info.value,
+    isSuccess: isSuccess.value,
+    isLoading: isLoadingRetry.value,
+    isFinished: isFinished.value,
+    isAborted: isAborted.value,
+    isReady: isReady.value,
+    isRetryWaiting: isRetryWaiting.value,
+    error,
+    errorMessage: errorMessage.value,
+    retryCount: retryCount.value,
+    consecutiveFailures: consecutiveFailures.value,
+    originalResult,
+  })
+
+  // 最终错误处理函数
+  const handleFinalError = (error: AxiosError<ApiResponse<T>>) => {
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+      return
+    }
+    try {
+      if (typeof config.errorHandler === 'function') {
+        config.errorHandler(error)
+      }
+      else if (!config.disableErrorHandling) {
+        Notify.error(errorMessage.value)
+      }
+    }
+    catch (err) {
+      console.error('[useApiRequest] 错误处理函数执行失败:', err)
+    }
+  }
+
+  // 重新执行请求的方法，可传入新参数
+  const refresh = (newOptions?: Partial<Omit<ApiRequestOptions<T, D>, 'url'>>) => {
+    // 合并新配置到请求参数
+    const newConfig = { ...config, ...newOptions }
+    // 合并新传入的headers（基于现有mergedHeaders再合并）
+    const newHeaders = deepMergeHeaders(mergedHeaders, newConfig.headers)
+    const newRequestConfig: AxiosRequestConfig<D> = {
+      ...requestConfig,
+      params: newConfig?.params ?? requestConfig.params,
+      data: newConfig?.data ?? requestConfig.data,
+      headers: newHeaders,
+      baseURL: newConfig?.baseURL ?? requestConfig.baseURL,
+    }
+    return originalExecute(newRequestConfig)
+  }
+
+  // 仅当有组件实例时，才注册onUnmounted（避免无实例时调用生命周期API）
+  if (currentInstance) {
+    onUnmounted(() => {
+      if (!isFinished.value) {
+        originalAbort()
+      }
+      // 清理计时器
+      if (resetFailureTimer.value) {
+        clearTimeout(resetFailureTimer.value)
+      }
+    })
+  }
+
+  // 计算重试延迟：整合指数退避和随机抖动
+  const calculateRetryDelay = (currentRetry: number): number => {
+    const baseDelay = config.retryDelay ?? 1000 // 基础延迟（默认1秒）
+    const multiplier = config.backoffMultiplier ?? 1.5 // 增长倍数
+    const maxDelay = config.maxRetryDelay ?? 5000 // 最大延迟
+    let finalDelay = baseDelay
+
+    // 处理指数退避（带自定义倍数+上限）
+    if (config.enableExponentialBackoff && currentRetry > 0) {
+      // 公式：baseDelay × (multiplier ^ (currentRetry - 1))
+      // 例：currentRetry=1 → 1×1.5^0=1秒；currentRetry=5 → 1×1.5^4≈5.06秒（再取maxDelay=5秒）
+      const backoffDelay = baseDelay * multiplier ** (currentRetry - 1)
+      // 延迟不超过最大上限
+      finalDelay = Math.min(backoffDelay, maxDelay)
+    }
+
+    // 处理随机抖动（确保延迟不小于100ms）
+    if (config.enableJitter) {
+      const range = config.jitterRange ?? 300
+      const jitter = Math.floor(Math.random() * (2 * range + 1)) - range
+      finalDelay = Math.max(finalDelay + jitter, 100)
+    }
+    return finalDelay
+  }
+
+  // 重写execute方法：迭代式重试 + 指数退避 + 随机抖动
+  const executeWithRetry = async (reqConfig?: AxiosRequestConfig<D>) => {
+    retryCount.value = 0
+    isReady.value = false
+    isRetryWaiting.value = false
+
+    try {
+      // 迭代重试核心循环
+      while (true) {
+        // 先判断是否已取消请求
+        if (isAborted.value) {
+          isReady.value = true
+          await nextTick() // 确保响应式更新
+          return getExecuteResult(null, requestError.value as AxiosError<ApiResponse<T>>)
+        }
+
+        try {
+          // 执行单次请求
+          const result = await originalExecute(reqConfig)
+          consecutiveFailures.value = 0 // 成功后重置连续失败计数
+          if (resetFailureTimer.value) {
+            clearTimeout(resetFailureTimer.value)
+          }
+          isReady.value = true
+          await nextTick() // 确保响应式更新
+          return getExecuteResult(result, null)
+        }
+        catch (error) {
+          const axiosError = error as AxiosError<ApiResponse<T>>
+          retryCount.value++ // 失败后计数+1
+          consecutiveFailures.value++
+          resetConsecutiveFailures() // 启动熔断恢复计时
+
+          // 熔断判断：连续失败超过阈值则停止重试
+          const isCircuitBroken = consecutiveFailures.value >= (config.maxConsecutiveFailures ?? 5)
+          if (isCircuitBroken && config.enableLog) {
+            console.warn(`[useApiRequest] 连续失败${consecutiveFailures.value}次，触发熔断`)
+          }
+
+          // 判断是否需要继续重试（仅网络错误/5xx + 未超次数）
+          const shouldRetry = !isCircuitBroken
+            && retryCount.value <= (config.maxRetries ?? 0)
+            && !isAborted.value
+            && !!axiosError
+            && (
+              !axiosError.response
+              || (config.retryStatusCodes?.includes(axiosError.response.status) ?? false)
+            )
+            && !(axiosError.response?.data?.status === -1)
+
+          if (shouldRetry) {
+            const delay = calculateRetryDelay(retryCount.value)
+            if (config.enableLog) {
+              console.log(`[useApiRequest] 第${retryCount.value}次重试，延迟${delay}ms`)
+            }
+            isRetryWaiting.value = true
+            await new Promise(resolve => setTimeout(resolve, delay))
+            isRetryWaiting.value = false
+          }
+          else {
+            isReady.value = true
+            handleFinalError(axiosError)
+            await nextTick() // 确保响应式更新
+            return getExecuteResult(null, axiosError)
+          }
+        }
+      }
+    }
+    finally {
+      isReady.value = true
+      isRetryWaiting.value = false
+    }
+  }
+
+  // 包装取消方法，重置状态
+  const abort = () => {
+    originalAbort()
+    resetRequestState()
+  }
+
+  const cancel = () => {
+    originalCancel()
+    resetRequestState()
+  }
+
+  // 重置请求状态方法
+  const resetRequestState = () => {
+    retryCount.value = 0
+    consecutiveFailures.value = 0
+    isRetryWaiting.value = false
+    if (resetFailureTimer.value) {
+      clearTimeout(resetFailureTimer.value)
+    }
+  }
+
+  // 处理immediate自动请求
+  if (config.immediate) {
+    executeWithRetry().catch(() => {
+      // 自动执行失败时不冒泡错误，避免控制台警告
+      // 外部可通过error和errorMessage获取错误信息
+    })
+  }
+
+  return {
+    // 原始响应数据
+    rawData,
+    // 业务数据
+    data,
+    // 响应对象（包括状态码、信息、数据）
+    response: safeResponse,
+    // 业务状态码
+    status,
+    // 业务信息
+    info,
+    // 是否请求成功
+    isSuccess,
+    // 错误信息
+    errorMessage,
+    // 加载状态
+    isLoading: isLoadingRetry,
+    isFinished,
+    isAborted,
+    // 错误对象
+    error: requestError,
+    // 执行请求
+    execute: () => executeWithRetry(),
+    isReady, // 请求最终就绪（成功或重试耗尽）
+    retryCount, // 当前重试次数
+    // 刷新请求（可更新参数）
+    refresh,
+    // 取消请求
+    abort,
+    cancel,
+  }
+}
+
+/**
+ * 代理请求的快捷方法
+ */
+export function useProxyRequest<T = any, D = any>(options: Omit<ApiRequestOptions<T, D>, 'url'> & {
+  baseURL?: string
+  path?: string
+}) {
+  const DEFAULT_PROXY_BASE_URL = '/proxy'
+  const baseURL = options.baseURL || DEFAULT_PROXY_BASE_URL
+  // 确保路径拼接正确，避免出现双斜杠
+  let fullUrl = baseURL
+  if (options.path) {
+    // 处理baseURL结尾的/和path开头的/，避免双斜杠或缺失
+    const baseHasTrailingSlash = baseURL.endsWith('/')
+    const pathHasLeadingSlash = options.path.startsWith('/')
+
+    if (baseHasTrailingSlash && pathHasLeadingSlash) {
+      fullUrl += options.path.slice(1) // 去掉path开头的/
+    }
+    else if (!baseHasTrailingSlash && !pathHasLeadingSlash) {
+      fullUrl += `/${options.path}` // 补一个/
+    }
+    else {
+      fullUrl += options.path // 其他情况直接拼接
+    }
+  }
+
+  // 移除不需要的属性
+  const { baseURL: _, path, ...requestOptions } = options
+  return useApiRequest<T, D>(fullUrl, requestOptions)
+}
+
+/**
+ * 非递归实现的headers深度合并（迭代法）
+ * 优势：避免递归调用栈开销，处理深层嵌套更安全（无栈溢出风险）
+ * @param sources 多个headers对象（最后一个优先级最高）
+ * @returns 合并后的headers对象
+ */
+function deepMergeHeaders<T extends Record<string, any>>(...sources: (T | undefined)[]): T {
+  // 过滤空值源，初始化合并结果
+  const validSources = sources.filter(Boolean) as T[]
+  if (validSources.length === 0) {
+    return {} as T
+  }
+  const result: Record<string, any> = { ...validSources[0] }
+
+  // 从第二个源开始合并（第一个已作为初始结果）
+  for (let i = 1; i < validSources.length; i++) {
+    const currentSource = validSources[i]
+    const stack: [Record<string, any>, Record<string, any>][] = [[result, currentSource]]
+
+    // 用栈模拟递归：每次处理一层对象
+    while (stack.length > 0) {
+      const [target, source] = stack.pop()! // 取出当前层的目标和源对象
+
+      // 遍历当前源对象的所有键
+      for (const key in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) {
+          continue
+        }
+
+        const targetValue = target[key]
+        const sourceValue = source[key]
+
+        // 判断是否为需要递归合并的对象（非null、非数组、纯对象）
+        const isTargetObject = typeof targetValue === 'object' && targetValue !== null && !Array.isArray(targetValue)
+        const isSourceObject = typeof sourceValue === 'object' && sourceValue !== null && !Array.isArray(sourceValue)
+
+        if (isTargetObject && isSourceObject) {
+          // 若目标中该键不存在，初始化空对象
+          if (!targetValue) {
+            target[key] = {}
+          }
+          // 将子对象推入栈，后续处理
+          stack.push([target[key], sourceValue])
+        }
+        else {
+          // 非对象值直接覆盖（包括数组、null、基本类型）
+          target[key] = sourceValue
+        }
+      }
+    }
+  }
+
+  return result as T
+}
