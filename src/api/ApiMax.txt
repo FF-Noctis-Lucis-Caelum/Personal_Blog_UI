@@ -1,8 +1,9 @@
 import type { StrictUseAxiosReturn, UseAxiosOptions } from '@vueuse/integrations/useAxios'
 import { baseConfig } from '@/config.ts'
-import { Notify } from '@/utils/notification'
-import { useAxios } from '@vueuse/integrations/useAxios'
+import { errorNotifier } from '@/request/errorNotifier.ts'
 
+import { Notify } from '@/utils/notification.ts'
+import { useAxios } from '@vueuse/integrations/useAxios'
 import axios, {
   type AxiosError,
   type AxiosRequestConfig,
@@ -53,11 +54,6 @@ NewService.interceptors.response.use(
     return response.data
   },
   (err: AxiosError) => {
-    if (err.response) {
-      // 可补充老项目的handleNetworkError逻辑（如404/500页面跳转）
-      // handleNetworkError(err.response.status)
-      return Promise.reject(err.response)
-    }
     return Promise.reject(err)
   },
 )
@@ -117,6 +113,10 @@ export interface ApiRequestOptions<T = any, D = any> extends Omit<UseAxiosOption
   enableLog?: boolean
   /** 连续失败熔断阈值（默认5次） */
   maxConsecutiveFailures?: number
+  /** 错误通知优先级（1-10，10为最高，会跳过合并） */
+  errorPriority?: number
+  /** 是否允许合并到全局错误通知（默认true） */
+  allowMerge?: boolean
 }
 
 // 默认请求配置
@@ -136,6 +136,8 @@ const DEFAULT_CONFIG: Partial<ApiRequestOptions> = {
   retryStatusCodes: [500, 502, 503, 504], // 常见可重试5xx状态码
   enableLog: false, // 默认关闭调试日志
   maxConsecutiveFailures: 5, // 连续失败5次后熔断
+  errorPriority: 1,
+  allowMerge: true,
 }
 
 // 定义execute方法的统一返回类型
@@ -178,8 +180,11 @@ export function useApiRequest<T = any, D = any>(
   url: string,
   options: Omit<ApiRequestOptions<T, D>, 'url'> = {},
 ) {
+  // 生成当前请求唯一ID（初始化阶段生成，贯穿全生命周期）
+  const requestId = generateRequestId()
   // 合并配置，确保url存在
   const config = { ...DEFAULT_CONFIG, ...options }
+
   const currentInstance = getCurrentInstance()
   // 重试计数器
   const retryCount = ref(0)
@@ -223,6 +228,18 @@ export function useApiRequest<T = any, D = any>(
     baseURL: config.baseURL,
     headers: mergedHeaders,
   }
+
+  // 初始化日志：显式声明当前请求ID，方便后续追踪
+  logHelper(
+    config.enableLog,
+    requestId, // 传入ID
+    '初始化',
+    `请求初始化完成，URL: ${url}`,
+    {
+      requestId, // 显式打印ID
+      ...requestConfig,
+    },
+  )
 
   // 创建请求实例
   const axiosResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> = useAxios<ApiResponse<T>, ApiResponse<T>, D>(
@@ -288,7 +305,7 @@ export function useApiRequest<T = any, D = any>(
   const errorMessage = computed(() => {
     if (requestError.value) {
       const axiosError = requestError.value as AxiosError<ApiResponse<T>>
-      // 网络错误细分
+      // 网络错误（无响应）
       if (!axiosError.response) {
         if (axiosError.code === 'ECONNABORTED') {
           return '请求超时，请稍后重试'
@@ -301,8 +318,13 @@ export function useApiRequest<T = any, D = any>(
         }
         return '网络请求异常'
       }
-      // 服务端错误
-      return axiosError.response.data?.info || axiosError.message || '请求发生错误'
+
+      // 服务端响应错误（有响应）
+      const responseData = axiosError.response.data
+      // 优先取业务错误信息，其次取HTTP状态文本，最后用默认信息
+      return responseData?.info
+        || axiosError.response.statusText
+        || `请求失败（状态码：${axiosError.response.status}）`
     }
     return ''
   })
@@ -337,18 +359,36 @@ export function useApiRequest<T = any, D = any>(
 
   // 最终错误处理函数
   const handleFinalError = (error: AxiosError<ApiResponse<T>>) => {
+    // 忽略取消类错误（主动取消的请求不需要提示）
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
       return
     }
+
     try {
+      // 优先使用用户自定义的错误处理函数
       if (typeof config.errorHandler === 'function') {
         config.errorHandler(error)
+        return
       }
-      else if (!config.disableErrorHandling) {
-        Notify.error(errorMessage.value)
+
+      // 未禁用默认错误处理时，使用全局错误管理器或直接显示
+      if (!config.disableErrorHandling) {
+        // 获取配置项（带默认值）
+        const priority = config.errorPriority ?? 1 // 默认优先级1
+        const allowMerge = config.allowMerge ?? true // 默认允许合并
+
+        if (allowMerge) {
+          // 允许合并：交给全局错误管理器处理（自动合并短时间内的错误）
+          errorNotifier.addError(errorMessage.value, priority)
+        }
+        else {
+          // 不允许合并：直接显示单个错误通知
+          Notify.error(errorMessage.value)
+        }
       }
     }
     catch (err) {
+      // 捕获错误处理过程中的异常，避免影响主流程
       console.error('[useApiRequest] 错误处理函数执行失败:', err)
     }
   }
@@ -413,11 +453,15 @@ export function useApiRequest<T = any, D = any>(
     isReady.value = false
     isRetryWaiting.value = false
 
+    // 请求开始日志
+    logHelper(config.enableLog, requestId, '请求执行', '开始发起请求')
+
     try {
       // 迭代重试核心循环
       while (true) {
         // 先判断是否已取消请求
         if (isAborted.value) {
+          logHelper(config.enableLog, requestId, '请求结束', '请求已被取消')
           isReady.value = true
           await nextTick() // 确保响应式更新
           return getExecuteResult(null, requestError.value as AxiosError<ApiResponse<T>>)
@@ -425,7 +469,23 @@ export function useApiRequest<T = any, D = any>(
 
         try {
           // 执行单次请求
+          logHelper(
+            config.enableLog,
+            requestId, // 传入ID
+            '请求执行',
+            `发起单次请求，当前重试次数: ${retryCount.value}`,
+            { retryCount: retryCount.value },
+          )
           const result = await originalExecute(reqConfig)
+
+          // 请求成功日志
+          logHelper(
+            config.enableLog,
+            requestId, // 传入ID
+            '请求成功',
+            `请求完成，业务状态码: ${status}`,
+            { data, info },
+          )
           consecutiveFailures.value = 0 // 成功后重置连续失败计数
           if (resetFailureTimer.value) {
             clearTimeout(resetFailureTimer.value)
@@ -442,8 +502,15 @@ export function useApiRequest<T = any, D = any>(
 
           // 熔断判断：连续失败超过阈值则停止重试
           const isCircuitBroken = consecutiveFailures.value >= (config.maxConsecutiveFailures ?? 5)
-          if (isCircuitBroken && config.enableLog) {
-            console.warn(`[useApiRequest] 连续失败${consecutiveFailures.value}次，触发熔断`)
+          if (isCircuitBroken) {
+            logHelper(
+              config.enableLog,
+              requestId, // 传入ID
+              '熔断触发',
+              `⚠️ 连续失败${consecutiveFailures.value}次，触发熔断！`,
+              { errorReason: axiosError.message, url },
+              'warn',
+            )
           }
 
           // 判断是否需要继续重试（仅网络错误/5xx + 未超次数）
@@ -459,14 +526,29 @@ export function useApiRequest<T = any, D = any>(
 
           if (shouldRetry) {
             const delay = calculateRetryDelay(retryCount.value)
-            if (config.enableLog) {
-              console.log(`[useApiRequest] 第${retryCount.value}次重试，延迟${delay}ms`)
-            }
+            // 重试准备日志（含延迟计算结果）
+            logHelper(
+              config.enableLog,
+              requestId, // 传入ID
+              '重试准备',
+              `将进行第${retryCount.value}次重试`,
+              { nextRetryDelay: `${delay}ms`, currentRetry: retryCount.value },
+            )
+
             isRetryWaiting.value = true
             await new Promise(resolve => setTimeout(resolve, delay))
             isRetryWaiting.value = false
           }
           else {
+            // 重试终止日志
+            logHelper(
+              config.enableLog,
+              requestId, // 传入ID
+              '请求失败',
+              `停止重试，原因：${isCircuitBroken ? '熔断触发' : '重试次数耗尽/不可重试错误'}`,
+              { totalRetry: retryCount.value, errorReason: axiosError.message },
+              isCircuitBroken ? 'warn' : 'info',
+            )
             isReady.value = true
             handleFinalError(axiosError)
             await nextTick() // 确保响应式更新
@@ -478,6 +560,14 @@ export function useApiRequest<T = any, D = any>(
     finally {
       isReady.value = true
       isRetryWaiting.value = false
+      // 请求结束日志
+      logHelper(
+        config.enableLog,
+        requestId, // 传入ID
+        '请求结束',
+        '请求生命周期完整结束',
+        { url, isSuccess: isSuccess.value, totalRetry: retryCount.value },
+      )
     }
   }
 
@@ -485,21 +575,33 @@ export function useApiRequest<T = any, D = any>(
   const abort = () => {
     originalAbort()
     resetRequestState()
+    logHelper(config.enableLog, requestId, '请求取消', '调用abort方法，重置请求状态', { url })
   }
 
   const cancel = () => {
     originalCancel()
     resetRequestState()
+    logHelper(config.enableLog, requestId, '请求取消', '调用cancel方法，重置请求状态', { url })
   }
 
   // 重置请求状态方法
   const resetRequestState = () => {
+    const prevRetryCount = retryCount.value
+    const prevFailures = consecutiveFailures.value
     retryCount.value = 0
     consecutiveFailures.value = 0
     isRetryWaiting.value = false
     if (resetFailureTimer.value) {
       clearTimeout(resetFailureTimer.value)
     }
+    // 状态重置日志
+    logHelper(
+      config.enableLog,
+      requestId, // 传入ID
+      '状态重置',
+      '重置请求计数器',
+      { prevRetryCount, prevFailures, url },
+    )
   }
 
   // 处理immediate自动请求
@@ -570,6 +672,15 @@ export function useProxyRequest<T = any, D = any>(options: Omit<ApiRequestOption
     }
   }
 
+  // 代理URL日志
+  logHelper(
+    options.enableLog ?? DEFAULT_CONFIG.enableLog,
+    generateRequestId(), // 临时生成一个用于代理日志，实际请求ID在useApiRequest中生成
+    '代理初始化',
+    '代理请求URL拼接完成',
+    { baseURL, path: options.path, finalUrl: fullUrl },
+  )
+
   // 移除不需要的属性
   const { baseURL: _, path, ...requestOptions } = options
   return useApiRequest<T, D>(fullUrl, requestOptions)
@@ -628,4 +739,56 @@ function deepMergeHeaders<T extends Record<string, any>>(...sources: (T | undefi
   }
 
   return result as T
+}
+
+/**
+ * 生成简洁易读的请求唯一ID（格式：req-xxxxxxxxx-xxxx）
+ * 特点：短、无混淆字符、视觉清晰
+ */
+function generateRequestId(): string {
+  // 取13位时间戳的后8位（精简时间，保证时效性）
+  const timestamp = Date.now().toString().slice(-8)
+
+  // 4位随机字符（排除 I/O/l/0，避免混淆）
+  const safeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz123456789'
+  let randomStr = ''
+  for (let i = 0; i < 4; i++) {
+    const randomIndex = Math.floor(Math.random() * safeChars.length)
+    randomStr += safeChars[randomIndex]
+  }
+
+  // 组合成最终ID
+  return `req-${timestamp}-${randomStr}`
+}
+
+/**
+ * 日志工具：支持请求唯一ID，关联全链路日志
+ * @param enableLog 是否启用日志
+ * @param requestId 请求唯一ID（贯穿全生命周期）
+ * @param stage 流程阶段（初始化/请求/重试/熔断/结束）
+ * @param message 日志内容
+ * @param data 核心附加数据
+ * @param level 日志级别（info/warn）
+ */
+function logHelper(
+  enableLog: boolean | undefined,
+  requestId: string,
+  stage: string,
+  message: string,
+  data?: Record<string, any>,
+  level: 'info' | 'warn' = 'info',
+) {
+  if (!enableLog) {
+    return
+  }
+  const timestamp = new Date().toLocaleTimeString()
+  // 格式：【阶段】[时间戳] [请求ID] | 内容
+  const prefix = `【${stage}】[${timestamp}] [${requestId}]`
+
+  if (level === 'warn') {
+    console.warn(`${prefix} | ${message}`, data ? '\n关键数据:' : '', data || '')
+  }
+  else {
+    console.info(`${prefix} | ${message}`, data ? '\n关键数据:' : '', data || '')
+  }
 }
