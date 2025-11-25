@@ -1,528 +1,801 @@
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { Message, Modal } from '@arco-design/web-vue';
-import { CommonConfig } from '@/config';
-import { getToken } from '@/utils/auth';
-import { useUserStore } from '@/store';
-import qs from 'qs';
+import type { StrictUseAxiosReturn, UseAxiosOptions } from '@vueuse/integrations/useAxios'
+import { CommonConfig } from '@/config'
+import { errorNotifier } from '@/api/errorNotifier.ts'
 
-// ============================ 类型定义（融合A/B优势）============================
-// 扩展全局类型（保留B项目原有）
-declare global {
-    interface Window {
-        __APP_CONFIG__: { baseURL: string };
-    }
-    namespace Axios {
-        interface AxiosRequestConfig {
-            metadata?: Record<string, any>;
+// 1. 替换错误的 Notify 导入 → 使用封装后的 notification
+import { notification } from '@/utils/extreme/notification';
+
+import { useAxios } from '@vueuse/integrations/useAxios'
+import axios, {
+    type AxiosError,
+    type AxiosRequestConfig,
+    type AxiosResponse,
+    type InternalAxiosRequestConfig,
+    type Method,
+} from 'axios'
+import { computed, getCurrentInstance, nextTick, onUnmounted, ref } from 'vue'
+
+// -------------------------- 创建新的独立axios实例 + 全局拦截器 --------------------------
+/**
+ * 新请求实例：仅服务于useApiRequest，与老service.ts完全隔离
+ * 复现老service.ts的所有核心逻辑（基础配置、拦截器）
+ */
+export const NewService = axios.create({
+    timeout: 50000, // 与老Service一致：50秒超时
+    baseURL: CommonConfig.gateway, // 复用项目基础URL
+    method: 'POST', // 默认POST，与老Service一致
+    headers: {
+        // 复现老Service的默认请求头，优先级：用户传入 > 实例默认
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Client-Type': 'axios',
+    },
+})
+
+/**
+ * 新请求拦截器
+ */
+NewService.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+    return config
+}, (error) => {
+    return Promise.reject(error)
+})
+
+/**
+ * 新响应拦截器
+ */
+NewService.interceptors.response.use(
+    (response: AxiosResponse) => {
+        return response.data
+    },
+    (err: AxiosError) => {
+        return Promise.reject(err)
+    },
+)
+
+// 定义通用的API响应结构
+export interface ApiResponse<T = any> {
+    code: number // 业务状态码
+    msg: string
+    data: T
+}
+
+// 定义请求选项
+export interface ApiRequestOptions<T = any, D = any> extends Omit<UseAxiosOptions<ApiResponse<T>>, 'immediate'> {
+    /** 请求URL（必填） */
+    url: string
+    /** 请求方法 */
+    method?: Method
+    /** URL查询参数 */
+    params?: Record<string, any>
+    /** 请求体数据 */
+    data?: D
+    /** 基础URL */
+    baseURL?: string
+    /** 请求头 */
+    headers?: AxiosRequestConfig['headers']
+    /** 是否立即执行请求 */
+    immediate?: boolean
+    /** 是否禁用默认错误处理 */
+    disableErrorHandling?: boolean
+    /** 是否启用gzip压缩 */
+    enableGzip?: boolean
+    /** 请求前拦截器 */
+    beforeRequest?: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>
+    /** 响应拦截器 */
+    afterResponse?: (response: AxiosResponse<ApiResponse<T>>) => AxiosResponse<ApiResponse<T>> | Promise<AxiosResponse<ApiResponse<T>>>
+    /** 错误处理函数 */
+    errorHandler?: (error: AxiosError<ApiResponse<T>>) => void
+    /** 最大重试次数（默认0次，不重试） */
+    maxRetries?: number
+    /** 重试延迟时间（毫秒，默认1000ms） */
+    retryDelay?: number
+    /** 是否在重试时显示加载状态 */
+    showRetryLoading?: boolean
+    /** 是否启用指数退避（默认true）：重试延迟随次数翻倍，减轻服务器压力 */
+    enableExponentialBackoff?: boolean
+    /** 指数退避增长倍数（默认1.5）：1.5=每次×1.5，2=每次×2，1=固定延迟 */
+    backoffMultiplier?: number
+    /** 最大重试延迟（毫秒，默认10000ms=10秒）：防止指数退避导致延迟过长 */
+    maxRetryDelay?: number
+    /** 是否启用随机抖动（默认true）：延迟叠加随机值，避免重试风暴 */
+    enableJitter?: boolean
+    /** 抖动范围（毫秒，默认300ms）：延迟会在 [-jitterRange, +jitterRange] 内波动 */
+    jitterRange?: number
+    /** 可重试的HTTP状态码列表（默认[500,502,503,504]） */
+    retryStatusCodes?: number[]
+    /** 是否启用调试日志 */
+    enableLog?: boolean
+    /** 连续失败熔断阈值（默认5次） */
+    maxConsecutiveFailures?: number
+    /** 错误通知优先级（1-10，10为最高，会跳过合并） */
+    errorPriority?: number
+    /** 是否允许合并到全局错误通知（默认true） */
+    allowMerge?: boolean
+}
+
+// 默认请求配置
+const DEFAULT_CONFIG: Partial<ApiRequestOptions> = {
+    method: 'POST',
+    immediate: false,
+    disableErrorHandling: false,
+    enableGzip: false,
+    maxRetries: 0,
+    retryDelay: 1000,
+    showRetryLoading: false,
+    enableExponentialBackoff: true,
+    backoffMultiplier: 1.5, // 默认×1.5，比×2平缓
+    maxRetryDelay: 5000, // 最大延迟5秒
+    enableJitter: true,
+    jitterRange: 300, // 抖动±300毫秒
+    retryStatusCodes: [502, 503, 504], // 常见可重试5xx状态码
+    enableLog: false, // 默认关闭调试日志
+    maxConsecutiveFailures: 5, // 连续失败5次后熔断
+    errorPriority: 1,
+    allowMerge: true,
+}
+
+// 定义execute方法的统一返回类型
+export interface ExecuteResult<T, D> {
+    // 业务数据
+    data: T
+    rawData: ApiResponse<T> | undefined
+    response: AxiosResponse<ApiResponse<T>>
+    // 状态标识
+    code: number
+    msg: string
+    isSuccess: boolean // 严格对应业务成功（code === 200）
+    isLoading: boolean
+    isFinished: boolean
+    isAborted: boolean
+    isReady: boolean
+    isRetryWaiting: boolean
+    // 错误信息
+    error: AxiosError<ApiResponse<T>> | undefined | null
+    errorMessage: string
+    // 重试相关
+    retryCount: number
+    consecutiveFailures: number // 连续失败次数（用于熔断）
+    // 原始结果（兼容用）
+    originalResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> | null
+}
+
+// 新增：安全响应类型定义（替代any）
+type SafeAxiosResponse<T> = AxiosResponse<ApiResponse<T>> & {
+    msg: string
+    data: T | null
+    code: number
+}
+
+/**
+ * 重构后的通用API请求Hook
+ * 提供更清晰的配置和更好的扩展性
+ */
+export function useApiRequest<T = any, D = any>(
+    url: string,
+    options: Omit<ApiRequestOptions<T, D>, 'url'> = {},
+) {
+    // 生成当前请求唯一ID（初始化阶段生成，贯穿全生命周期）
+    const requestId = generateRequestId()
+    // 合并配置，确保url存在
+    const config = { ...DEFAULT_CONFIG, ...options }
+
+    const currentInstance = getCurrentInstance()
+    // 重试计数器
+    const retryCount = ref(0)
+    // 连续失败计数器（用于熔断）
+    const consecutiveFailures = ref(0)
+    // 最终就绪状态（请求完成且不再重试）
+    const isReady = ref(false)
+    // 重试等待状态（延迟期间为true）
+    const isRetryWaiting = ref(false)
+
+    // 2. 修正定时器类型：浏览器环境用 number | null 替代 NodeJS.Timeout
+    const resetFailureTimer = ref<number | null>(null)
+    const resetConsecutiveFailures = () => {
+        if (resetFailureTimer.value) {
+            clearTimeout(resetFailureTimer.value)
         }
-    }
-}
-
-// B项目原有响应结构（保持兼容）
-export interface ResponseData<T = any> {
-    code: number;
-    data: T;
-    msg: string;
-    [key: string]: any;
-}
-
-// 扩展请求配置（新增A项目的灵活配置项）
-export interface RequestOptions extends AxiosRequestConfig {
-    // B项目原有配置
-    metadata?: { circuitBreakerKey?: string; [key: string]: any };
-    loading?: boolean | { text?: string; delay?: number };
-    showError?: boolean;
-    customError?: (error: AxiosError<ResponseData>) => void;
-    retry?: { attempts?: number; delay?: number; codes?: number[] };
-    __retryCount?: number;
-
-    // A项目核心灵活配置（新增）
-    /** 是否立即执行请求（默认true，false时返回手动执行方法） */
-    immediate?: boolean;
-    /** 自定义请求拦截器（临时生效，请求结束后移除） */
-    beforeRequest?: (config: InternalAxiosRequestConfig) => InternalAxiosRequestConfig | Promise<InternalAxiosRequestConfig>;
-    /** 自定义响应拦截器（临时生效，请求结束后移除） */
-    afterResponse?: (response: AxiosResponse<ResponseData>) => AxiosResponse<ResponseData> | Promise<AxiosResponse<ResponseData>>;
-    /** 基础URL（优先级高于实例默认baseURL） */
-    baseURL?: string;
-}
-
-// 延迟执行时的返回类型（新增，参考A项目）
-export interface LazyRequestResult<T = any> {
-    execute: (newOptions?: Partial<RequestOptions>) => Promise<T>;
-    abort: () => void;
-    isLoading: boolean;
-    rawData: ResponseData<T> | null;
-}
-
-// 代理请求配置（参考A项目useProxyRequest）
-export interface ProxyRequestConfig {
-    baseURL: string;
-    defaultOptions?: Partial<RequestOptions>;
-}
-
-// ============================ 核心请求类（保留B+扩展A）============================
-class Request {
-    // B项目原有核心属性
-    private readonly instance: AxiosInstance;
-    private loadingCount = 0;
-    private loadingInstance: ReturnType<typeof Message.loading> | null = null;
-    private loadingTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly defaultLoadingDelay = 300;
-    private readonly defaultRetryAttempts = 2;
-    private readonly defaultRetryDelay = 1000;
-    private maxConcurrent = 10;
-    private pendingQueue: Array<() => void> = [];
-    private activeRequests = new Map<string, AbortController>();
-    private circuitBreaker = new Map<
-        string,
-        { failures: number; lastFailure: number; isTripped: boolean }
-    >();
-
-    // A项目扩展属性（临时拦截器管理）
-    private requestInterceptorIds: number[] = [];
-    private responseInterceptorIds: number[] = [];
-
-    constructor(defaultConfig: AxiosRequestConfig) {
-        // 初始化实例（保留B项目的params序列化、超时等配置）
-        this.instance = axios.create({
-            baseURL: this.resolveBaseUrl(defaultConfig),
-            timeout: 15000,
-            headers: { 'Content-Type': 'application/json;charset=UTF-8' },
-            paramsSerializer: (params) => qs.stringify(params, {
-                arrayFormat: 'repeat',
-                skipNulls: true,
-                encode: false
-            }),
-            ...defaultConfig
-        });
-
-        // 初始化全局拦截器（保留B项目的基础拦截）
-        this.initGlobalInterceptors();
-    }
-
-    // ============================ B项目原有核心方法（保留并兼容）============================
-    /** 智能解析基地址（保留B项目逻辑） */
-    private resolveBaseUrl(config: AxiosRequestConfig): string {
-        if (import.meta.env.DEV) return '';
-        if (config.baseURL) return config.baseURL;
-        try {
-            const envBase = window.__APP_CONFIG__.baseURL;
-            if (envBase) return envBase;
-        } catch (e) {
-            console.warn('环境配置解析失败:', e);
-        }
-        throw new Error(`生产环境必须配置API基地址！检查.env.production或CI/CD变量`);
-    }
-
-    /** 全局拦截器（保留B项目的错误、loading、token处理） */
-    private initGlobalInterceptors() {
-        // 请求拦截器（全局基础逻辑）
-        this.instance.interceptors.request.use(
-            (config) => {
-                this.validateConfig(config);
-                const loadingConfig = this.normalizeLoadingConfig(config as RequestOptions);
-                if (loadingConfig.enable) this.startLoading(loadingConfig);
-
-                // 全局Token注入（保留B项目逻辑）
-                const token = getToken();
-                if (token && !config.headers?.[CommonConfig.Auth]) {
-                    config.headers![CommonConfig.Auth] = token;
-                }
-                return config;
-            },
-            (error) => {
-                this.handleRequestError(error);
-                return Promise.reject(error);
+        resetFailureTimer.value = window.setTimeout(() => {
+            consecutiveFailures.value = 0
+            if (config.enableLog) {
+                console.log('[useApiRequest] 熔断状态已恢复')
             }
-        );
-
-        // 响应拦截器（全局基础逻辑）
-        this.instance.interceptors.response.use(
-            (response) => {
-                console.debug('API响应:', { url: response.config.url, status: response.status });
-                this.handleResponseSuccess(response);
-                return response;
-            },
-            (error) => this.handleResponseError(error)
-        );
+        }, 30000) // 30秒后自动恢复熔断
     }
 
-    /** 加载状态管理（保留B项目逻辑） */
-    private normalizeLoadingConfig(config: RequestOptions): { enable: boolean; text: string; delay: number } {
-        const defaultConfig = { enable: true, text: '加载中...', delay: this.defaultLoadingDelay };
-        if (!config || config.loading === undefined) return defaultConfig;
-        if (!config.loading) return { ...defaultConfig, enable: false };
-        return {
-            enable: true,
-            text: (config.loading as { text?: string }).text || defaultConfig.text,
-            delay: (config.loading as { delay?: number }).delay || defaultConfig.delay
-        };
+    // 基础默认headers
+    const baseHeaders: AxiosRequestConfig['headers'] = {
+        'Access-Control-Allow-Origin': '*',
+        'X-Client-Type': 'axios',
+        'Content-Type': 'application/json',
+        ...(config.enableGzip ? { 'Accept-Encoding': 'gzip, deflate, br' } : {}),
     }
 
-    private startLoading(config: { text: string; delay: number }) {
-        this.loadingCount++;
-        if (!this.loadingTimer) {
-            this.loadingTimer = setTimeout(() => {
-                if (this.loadingCount > 0 && !this.loadingInstance) {
-                    this.loadingInstance = Message.loading({ content: config.text, duration: 0 });
-                }
-                this.loadingTimer = null;
-            }, config.delay);
-        }
+    const mergedHeaders = deepMergeHeaders(baseHeaders, config.headers)
+
+    // 创建请求配置
+    const requestConfig: AxiosRequestConfig<D> = {
+        url,
+        method: config.method,
+        params: config.params,
+        data: config.data,
+        baseURL: config.baseURL,
+        headers: mergedHeaders,
     }
 
-    private endLoading() {
-        this.loadingCount = Math.max(0, this.loadingCount - 1);
-        if (this.loadingCount === 0) {
-            if (this.loadingTimer) clearTimeout(this.loadingTimer);
-            if (this.loadingInstance) this.loadingInstance.close();
-            this.loadingTimer = null;
-            this.loadingInstance = null;
-        }
-    }
+    // 初始化日志：显式声明当前请求ID，方便后续追踪
+    logHelper(
+        config.enableLog,
+        requestId, // 传入ID
+        '初始化',
+        `请求初始化完成，URL: ${url}`,
+        {
+            requestId, // 显式打印ID
+            ...requestConfig,
+        },
+    )
 
-    /** 错误处理（保留B项目的401、网络错误、业务错误逻辑） */
-    private handleRequestError(error: AxiosError) {
-        const config = error.config as RequestOptions;
-        const loadingConfig = this.normalizeLoadingConfig(config);
-        if (loadingConfig.enable) {
-            this.loadingCount = 0;
-            this.endLoading();
-        }
-    }
-
-    private handleResponseSuccess(response: AxiosResponse<ResponseData>) {
-        const config = response.config as RequestOptions;
-        const loadingConfig = this.normalizeLoadingConfig(config);
-        if (loadingConfig.enable) this.endLoading();
-
-        // 业务错误（code非200/20000）
-        const res = response.data;
-        if (res.code !== 200 && res.code !== 20000) {
-            this.handleBusinessError(res, response).then();
-        }
-    }
-
-    private async handleResponseError(error: AxiosError<ResponseData>) {
-        const config = error.config as RequestOptions;
-        if (config) {
-            const loadingConfig = this.normalizeLoadingConfig(config);
-            if (loadingConfig.enable) this.endLoading();
-        }
-
-        // 网络错误
-        if (!error.response) return this.handleNetworkError(error, config);
-        // 401登录过期
-        if (error.response.status === 401) {
-            this.handleUnauthorized();
-            return Promise.reject(error);
-        }
-        // 特殊错误码（50008/50012/50014）
-        const res = error.response.data;
-        if ([50008, 50012, 50014].includes(res.code)) {
-            this.showReLoginModal();
-        }
-        // 默认错误提示
-        this.handleDefaultError(config, error);
-        // 重试逻辑
-        if (config && this.shouldRetry(config, error)) {
-            return this.retryRequest(config, error);
-        }
-
-        return Promise.reject(error);
-    }
-
-    private handleNetworkError(error: AxiosError, config?: RequestOptions) {
-        console.error('网络异常:', error.message);
-        if (this.isBrowserEnv() && config?.showError !== false) {
-            Message.error({ content: this.parseErrorMessage(error), duration: 5000 });
-        }
-        return Promise.reject(error);
-    }
-
-    private handleBusinessError(res: ResponseData, response: AxiosResponse<ResponseData>) {
-        if (this.isBrowserEnv()) {
-            Message.error({ content: res.msg || '业务逻辑错误', duration: 5000 });
-        }
-        if ([50008, 50012, 50014].includes(res.code) && response.config.url !== '/api/user/info') {
-            this.showReLoginModal();
-        }
-        const error = new Error(res.msg || '业务错误') as AxiosError<ResponseData>;
-        error.response = response;
-        return Promise.reject(error);
-    }
-
-    private showReLoginModal() {
-        if (!this.isBrowserEnv()) return;
-        Modal.error({
-            title: '登录失效',
-            content: '您的登录状态已过期，请重新登录',
-            okText: '重新登录',
-            async onOk() {
-                const userStore = useUserStore();
-                await userStore.logout();
-                window.location.reload();
-            }
-        });
-    }
-
-    // ============================ A项目扩展功能（核心新增）============================
-    /** 临时添加自定义拦截器（参考A项目，请求结束后自动移除） */
-    private addTempInterceptors(options: RequestOptions) {
-        // 清空历史临时拦截器
-        this.removeTempInterceptors();
-
-        // 自定义请求拦截器
-        if (options.beforeRequest) {
-            const id = this.instance.interceptors.request.use(options.beforeRequest);
-            this.requestInterceptorIds.push(id);
-        }
-
-        // 自定义响应拦截器
-        if (options.afterResponse) {
-            const id = this.instance.interceptors.response.use(options.afterResponse);
-            this.responseInterceptorIds.push(id);
-        }
-    }
-
-    /** 移除临时拦截器（避免全局污染） */
-    private removeTempInterceptors() {
-        this.requestInterceptorIds.forEach(id => this.instance.interceptors.request.eject(id));
-        this.responseInterceptorIds.forEach(id => this.instance.interceptors.response.eject(id));
-        this.requestInterceptorIds = [];
-        this.responseInterceptorIds = [];
-    }
-
-    /** 生成请求唯一Key（用于防重、熔断） */
-    private generateRequestKey(config: RequestOptions): string {
-        const { method, url, params, data, baseURL } = config;
-        return [
-            method?.toUpperCase(),
-            baseURL || this.instance.defaults.baseURL,
-            url,
-            JSON.stringify(params),
-            JSON.stringify(data)
-        ].join('|');
-    }
-
-    /** 执行实际请求（融合立即执行/延迟执行逻辑） */
-    private async executeRequest<T = any>(config: RequestOptions): Promise<T> {
-        const requestKey = this.generateRequestKey(config);
-        const controller = new AbortController();
-
-        // 熔断检查（保留B项目逻辑）
-        if (this.checkCircuitBreaker(requestKey)) {
-            throw new Error('服务暂时不可用，请稍后重试');
-        }
-
-        // 防重控制（保留B项目逻辑）
-        if (this.activeRequests.has(requestKey)) {
-            this.activeRequests.get(requestKey)?.abort();
-        }
-        this.activeRequests.set(requestKey, controller);
-
-        // 合并配置（支持自定义baseURL）
-        const finalConfig: RequestOptions = {
+    // 创建请求实例
+    const axiosResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> = useAxios<ApiResponse<T>, ApiResponse<T>, D>(
+        url,
+        requestConfig,
+        NewService, // 直接使用Service实例
+        {
+            immediate: false, // 延迟执行，手动控制immediate
             ...config,
-            baseURL: config.baseURL || this.instance.defaults.baseURL,
-            signal: controller.signal,
-            metadata: { ...config.metadata, requestKey, startTime: Date.now() }
-        };
+        },
+    )
+
+    // 从useAxios结果中提取所需属性
+    const {
+        data: rawData,
+        response: originalResponse,
+        isLoading,
+        isFinished,
+        isAborted,
+        error: requestError,
+        execute: originalExecute,
+        abort: originalAbort,
+        cancel: originalCancel,
+    } = axiosResult
+
+    // 定义“安全响应”计算属性，确保永远不为undefined
+    // 即使后端无响应，也返回一个默认的AxiosResponse结构
+    const safeResponse = computed<SafeAxiosResponse<T>>(() => {
+        // 如果原始response存在，直接返回完整的AxiosResponse
+        if (originalResponse.value) {
+            return originalResponse.value as SafeAxiosResponse<T>
+        }
+
+        // 处理“无响应”的边界情况（如网络错误、请求中断等）
+        return {
+            msg: requestError.value
+                ? `请求异常: ${requestError.value.message || requestError.value}`
+                : '未收到响应',
+            data: null as unknown as T,
+            code: 400, // HTTP状态码：0表示无响应
+            statusText: '',
+            headers: {},
+            config: requestConfig,
+            request: null,
+        } as SafeAxiosResponse<T>
+    })
+
+    // 提取业务数据
+    const data = computed<T>(() => {
+        return safeResponse.value.status === 1 && safeResponse.value.data
+            ? safeResponse.value.data
+            : ({} as T)
+    })
+
+    // 业务状态和信息
+    const code = computed(() => safeResponse.value.code)
+    const msg = computed(() => safeResponse.value.msg)
+
+    // 新增“是否请求成功”的状态（用于外部判断）
+    const isSuccess = computed(() => code.value === 200 && !!data.value)
+
+    // 错误信息
+    const errorMessage = computed(() => {
+        if (requestError.value) {
+            const axiosError = requestError.value as AxiosError<ApiResponse<T>>
+            // 网络错误（无响应）
+            if (!axiosError.response) {
+                if (axiosError.code === 'ECONNABORTED') {
+                    return '请求超时，请稍后重试'
+                }
+                if (axiosError.code === 'ERR_NETWORK') {
+                    return '网络连接失败，请检查网络'
+                }
+                if (axiosError.name === 'CanceledError') {
+                    return '请求已取消'
+                }
+                return '网络请求异常'
+            }
+
+            // 服务端响应错误（有响应）
+            const responseData = axiosError.response.data
+            // 优先取业务错误信息，其次取HTTP状态文本，最后用默认信息
+            return responseData?.msg
+                || axiosError.response.statusText
+                || `请求失败（状态码：${axiosError.response.status}）`
+        }
+        return ''
+    })
+
+    // 加载状态（支持隐藏重试加载）
+    const isLoadingRetry = computed(() => {
+        return isLoading.value && (config.showRetryLoading || retryCount.value === 0)
+    })
+
+    // 统一返回结果生成函数（消除代码冗余）
+    const getExecuteResult = (
+        originalResult: StrictUseAxiosReturn<ApiResponse<T>, ApiResponse<T>, D> | null,
+        error: AxiosError<ApiResponse<T>> | undefined | null,
+    ): ExecuteResult<T, D> => ({
+        data: data.value,
+        rawData: rawData.value,
+        response: safeResponse.value,
+        code: code.value,
+        msg: msg.value,
+        isSuccess: isSuccess.value,
+        isLoading: isLoadingRetry.value,
+        isFinished: isFinished.value,
+        isAborted: isAborted.value,
+        isReady: isReady.value,
+        isRetryWaiting: isRetryWaiting.value,
+        error,
+        errorMessage: errorMessage.value,
+        retryCount: retryCount.value,
+        consecutiveFailures: consecutiveFailures.value,
+        originalResult,
+    })
+
+    // 最终错误处理函数
+    const handleFinalError = (error: AxiosError<ApiResponse<T>>) => {
+        // 忽略取消类错误（主动取消的请求不需要提示）
+        if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+            return
+        }
 
         try {
-            // 添加临时拦截器（A项目核心）
-            this.addTempInterceptors(finalConfig);
+            // 优先使用用户自定义的错误处理函数
+            if (typeof config.errorHandler === 'function') {
+                config.errorHandler(error)
+                return
+            }
 
-            // 发送请求
-            const response = await this.instance(finalConfig);
-            const res = response.data as ResponseData<T>;
+            // 未禁用默认错误处理时，使用全局错误管理器或直接显示
+            if (!config.disableErrorHandling) {
+                // 获取配置项（带默认值）
+                const priority = config.errorPriority ?? 1 // 默认优先级1
+                const allowMerge = config.allowMerge ?? true // 默认允许合并
 
-            // 业务数据提取（参考A项目的data/computed）
-            return res.code === 200 || res.code === 20000 ? res.data : Promise.reject(res);
-        } catch (error) {
-            // 熔断状态更新（保留B项目逻辑）
-            this.updateCircuitBreaker(requestKey, error as AxiosError);
-            throw error;
-        } finally {
-            // 清理资源
-            this.activeRequests.delete(requestKey);
-            this.removeTempInterceptors(); // 移除临时拦截器
-            this.processQueue(); // 处理并发队列
+                if (allowMerge) {
+                    // 允许合并：交给全局错误管理器处理（自动合并短时间内的错误）
+                    errorNotifier.addError(errorMessage.value, priority)
+                }
+                else {
+                    // 3. 替换 Notify.error → 使用封装后的 notification.error（传配置对象）
+                    notification.error({
+                        title: '接口请求失败', // 统一错误标题
+                        content: errorMessage.value, // 错误内容
+                        duration: 6000, // 错误通知显示6秒（比默认长，便于查看）
+                        closable: true, // 显示关闭按钮
+                        position: 'topRight', // 固定位置（对齐全局默认）
+                        onClose: () => {
+                            // 可选：关闭时的额外逻辑
+                            if (config.enableLog) {
+                                logHelper(config.enableLog, requestId, '错误通知', '用户关闭了错误提示', { url })
+                            }
+                        },
+                    })
+                }
+            }
+        }
+        catch (err) {
+            // 捕获错误处理过程中的异常，避免影响主流程
+            console.error('[useApiRequest] 错误处理函数执行失败:', err)
         }
     }
 
-    /** 对外请求方法（支持立即执行/延迟执行） */
-    public request<T = any>(config: RequestOptions): Promise<T> | LazyRequestResult<T> {
-        // 默认立即执行（兼容B项目原有使用方式）
-        const finalConfig = { immediate: true, showError: true, ...config };
+    // 重新执行请求的方法，可传入新参数
+    const refresh = (newOptions?: Partial<Omit<ApiRequestOptions<T, D>, 'url'>>) => {
+        // 合并新配置到请求参数
+        const newConfig = { ...config, ...newOptions }
+        // 合并新传入的headers（基于现有mergedHeaders再合并）
+        const newHeaders = deepMergeHeaders(mergedHeaders, newConfig.headers)
+        const newRequestConfig: AxiosRequestConfig<D> = {
+            ...requestConfig,
+            params: newConfig?.params ?? requestConfig.params,
+            data: newConfig?.data ?? requestConfig.data,
+            headers: newHeaders,
+            baseURL: newConfig?.baseURL ?? requestConfig.baseURL,
+        }
+        return originalExecute(newRequestConfig)
+    }
 
-        // 延迟执行：返回手动执行方法（A项目核心功能）
-        if (!finalConfig.immediate) {
-            let isLoading = false;
-            let rawData: ResponseData<T> | null = null;
-            const controller = new AbortController();
+    // 仅当有组件实例时，才注册onUnmounted（避免无实例时调用生命周期API）
+    if (currentInstance) {
+        onUnmounted(() => {
+            if (!isFinished.value) {
+                originalAbort()
+            }
+            // 清理计时器
+            if (resetFailureTimer.value) {
+                clearTimeout(resetFailureTimer.value)
+            }
+        })
+    }
 
-            return {
-                isLoading,
-                rawData,
-                abort: () => controller.abort(),
-                execute: async (newOptions?: Partial<RequestOptions>) => {
-                    isLoading = true;
-                    try {
-                        const result = await this.executeRequest<T>({
-                            ...finalConfig,
-                            ...newOptions,
-                            signal: controller.signal
-                        });
-                        rawData = (await this.instance({ ...finalConfig, ...newOptions })).data as ResponseData<T>;
-                        return result;
-                    } finally {
-                        isLoading = false;
+    // 计算重试延迟：整合指数退避和随机抖动
+    const calculateRetryDelay = (currentRetry: number): number => {
+        const baseDelay = config.retryDelay ?? 1000 // 基础延迟（默认1秒）
+        const multiplier = config.backoffMultiplier ?? 1.5 // 增长倍数
+        const maxDelay = config.maxRetryDelay ?? 5000 // 最大延迟
+        let finalDelay = baseDelay
+
+        // 处理指数退避（带自定义倍数+上限）
+        if (config.enableExponentialBackoff && currentRetry > 0) {
+            // 公式：baseDelay × (multiplier ^ (currentRetry - 1))
+            // 例：currentRetry=1 → 1×1.5^0=1秒；currentRetry=5 → 1×1.5^4≈5.06秒（再取maxDelay=5秒）
+            const backoffDelay = baseDelay * multiplier ** (currentRetry - 1)
+            // 延迟不超过最大上限
+            finalDelay = Math.min(backoffDelay, maxDelay)
+        }
+
+        // 处理随机抖动（确保延迟不小于100ms）
+        if (config.enableJitter) {
+            const range = config.jitterRange ?? 300
+            const jitter = Math.floor(Math.random() * (2 * range + 1)) - range
+            finalDelay = Math.max(finalDelay + jitter, 100)
+        }
+        return finalDelay
+    }
+
+    // 重写execute方法：迭代式重试 + 指数退避 + 随机抖动
+    const executeWithRetry = async (reqConfig?: AxiosRequestConfig<D>) => {
+        retryCount.value = 0
+        isReady.value = false
+        isRetryWaiting.value = false
+
+        // 请求开始日志
+        logHelper(config.enableLog, requestId, '请求执行', '开始发起请求')
+
+        try {
+            // 迭代重试核心循环
+            while (true) {
+                // 先判断是否已取消请求
+                if (isAborted.value) {
+                    logHelper(config.enableLog, requestId, '请求结束', '请求已被取消')
+                    isReady.value = true
+                    await nextTick() // 确保响应式更新
+                    return getExecuteResult(null, requestError.value as AxiosError<ApiResponse<T>>)
+                }
+
+                try {
+                    // 执行单次请求
+                    logHelper(
+                        config.enableLog,
+                        requestId, // 传入ID
+                        '请求执行',
+                        `发起单次请求，当前重试次数: ${retryCount.value}`,
+                        { retryCount: retryCount.value },
+                    )
+                    const result = await originalExecute(reqConfig)
+
+                    // 4. 修复日志中 status 未取响应式值的问题（status → status.value）
+                    logHelper(
+                        config.enableLog,
+                        requestId, // 传入ID
+                        '请求成功',
+                        `请求完成，业务状态码: ${code.value}`,
+                        { data: data.value, info: msg.value },
+                    )
+                    consecutiveFailures.value = 0 // 成功后重置连续失败计数
+                    if (resetFailureTimer.value) {
+                        clearTimeout(resetFailureTimer.value)
+                    }
+                    isReady.value = true
+                    await nextTick() // 确保响应式更新
+                    return getExecuteResult(result, null)
+                }
+                catch (error) {
+                    const axiosError = error as AxiosError<ApiResponse<T>>
+                    retryCount.value++ // 失败后计数+1
+                    consecutiveFailures.value++
+                    resetConsecutiveFailures() // 启动熔断恢复计时
+
+                    // 熔断判断：连续失败超过阈值则停止重试
+                    const isCircuitBroken = consecutiveFailures.value >= (config.maxConsecutiveFailures ?? 5)
+                    if (isCircuitBroken) {
+                        logHelper(
+                            config.enableLog,
+                            requestId, // 传入ID
+                            '熔断触发',
+                            `⚠️ 连续失败${consecutiveFailures.value}次，触发熔断！`,
+                            { errorReason: axiosError.message, url },
+                            'warn',
+                        )
+                    }
+
+                    // 判断是否需要继续重试（仅网络错误/5xx + 未超次数）
+                    const shouldRetry = !isCircuitBroken
+                        && retryCount.value <= (config.maxRetries ?? 0)
+                        && !isAborted.value
+                        && !!axiosError
+                        && (
+                            !axiosError.response
+                            || (config.retryStatusCodes?.includes(axiosError.response.status) ?? false)
+                        )
+                        && !(axiosError.response?.data?.code === -1)
+
+                    if (shouldRetry) {
+                        const delay = calculateRetryDelay(retryCount.value)
+                        // 重试准备日志（含延迟计算结果）
+                        logHelper(
+                            config.enableLog,
+                            requestId, // 传入ID
+                            '重试准备',
+                            `将进行第${retryCount.value}次重试`,
+                            { nextRetryDelay: `${delay}ms`, currentRetry: retryCount.value },
+                        )
+
+                        isRetryWaiting.value = true
+                        await new Promise(resolve => setTimeout(resolve, delay))
+                        isRetryWaiting.value = false
+                    }
+                    else {
+                        // 重试终止日志
+                        logHelper(
+                            config.enableLog,
+                            requestId, // 传入ID
+                            '请求失败',
+                            `停止重试，原因：${isCircuitBroken ? '熔断触发' : '重试次数耗尽/不可重试错误'}`,
+                            { totalRetry: retryCount.value, errorReason: axiosError.message },
+                            isCircuitBroken ? 'warn' : 'info',
+                        )
+                        isReady.value = true
+                        handleFinalError(axiosError)
+                        await nextTick() // 确保响应式更新
+                        return getExecuteResult(null, axiosError)
                     }
                 }
-            };
-        }
-
-        // 立即执行：直接返回Promise（兼容B项目）
-        return this.executeRequest<T>(finalConfig);
-    }
-
-    // ============================ 快捷请求方法（保留B+兼容扩展）============================
-    public get<T = any>(url: string, params?: any, config?: RequestOptions): Promise<T> | LazyRequestResult<T> {
-        return this.request({ url, params, method: 'GET', ...config });
-    }
-
-    public post<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> | LazyRequestResult<T> {
-        return this.request({ url, data, method: 'POST', ...config });
-    }
-
-    public put<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> | LazyRequestResult<T> {
-        return this.request({ url, data, method: 'PUT', ...config });
-    }
-
-    public delete<T = any>(url: string, data?: any, config?: RequestOptions): Promise<T> | LazyRequestResult<T> {
-        return this.request({ url, data, method: 'DELETE', ...config });
-    }
-
-    // ============================ 工具方法（保留B项目）============================
-    private isBrowserEnv(): boolean {
-        return typeof window !== 'undefined' && typeof document !== 'undefined';
-    }
-
-    private parseErrorMessage(error: AxiosError): string {
-        if (error.code === 'ECONNREFUSED') return '无法连接服务器，请检查服务状态';
-        const errorMap: Record<number, string> = {
-            400: '请求参数错误',
-            401: '登录已过期',
-            403: '没有操作权限',
-            404: '资源不存在',
-            500: '服务器错误',
-            502: '网关错误',
-            503: '服务不可用'
-        };
-        return (error.response?.data as ResponseData)?.msg || errorMap[error.response?.status || 0] || error.message.replace(/^Axios\sError:\s*/, '');
-    }
-
-    private handleUnauthorized() {
-        localStorage.removeItem('token');
-        if (!window.location.pathname.includes('/login')) {
-            window.location.replace(`/login?redirect=${encodeURIComponent(location.href)}`);
-        }
-    }
-
-    private handleDefaultError(config: RequestOptions, error: AxiosError) {
-        if (this.isBrowserEnv() && config.showError !== false) {
-            Message.error({ content: this.parseErrorMessage(error), duration: 5000 });
-        }
-    }
-
-    private shouldRetry(config: RequestOptions, error: AxiosError): boolean {
-        const retryOptions = config.retry || {};
-        const maxRetries = retryOptions.attempts ?? this.defaultRetryAttempts;
-        const retryCodes = retryOptions.codes ?? [500, 502, 503, 504];
-        return (config.__retryCount || 0) < maxRetries && (retryCodes.includes(error.response?.status || 0) || error.code === 'ECONNREFUSED');
-    }
-
-    private retryRequest(config: RequestOptions, error: AxiosError) {
-        const retryOptions = config.retry || {};
-        const retryDelay = retryOptions.delay ?? this.defaultRetryDelay;
-        config.__retryCount = (config.__retryCount || 0) + 1;
-        const delay = Math.min(retryDelay * Math.pow(2, config.__retryCount), 30000);
-
-        return new Promise((resolve) => {
-            setTimeout(() => resolve(this.instance(config)), delay);
-        });
-    }
-
-    private validateConfig(config: AxiosRequestConfig) {
-        if (!config.baseURL) {
-            console.error('请求配置异常:', config);
-            Message.error('系统配置异常，请联系管理员');
-            throw new Error('缺失baseURL配置');
-        }
-    }
-
-    private checkCircuitBreaker(key: string): boolean {
-        const record = this.circuitBreaker.get(key);
-        if (!record) return false;
-        if (record.failures >= 3 && Date.now() - record.lastFailure < 30000) {
-            if (!record.isTripped) {
-                record.isTripped = true;
-                setTimeout(() => this.circuitBreaker.delete(key), 60000);
             }
-            return true;
         }
-        return false;
-    }
-
-    private updateCircuitBreaker(key: string, error: AxiosError) {
-        const status = error.response?.status;
-        if (status && status >= 500) {
-            const record = this.circuitBreaker.get(key) || { failures: 0, lastFailure: 0, isTripped: false };
-            record.failures += 1;
-            record.lastFailure = Date.now();
-            this.circuitBreaker.set(key, record);
-        }
-    }
-
-    private processQueue() {
-        if (this.pendingQueue.length > 0 && this.activeRequests.size < this.maxConcurrent) {
-            this.pendingQueue.shift()?.();
+        finally {
+            isReady.value = true
+            isRetryWaiting.value = false
+            // 请求结束日志
+            logHelper(
+                config.enableLog,
+                requestId, // 传入ID
+                '请求结束',
+                '请求生命周期完整结束',
+                { url, isSuccess: isSuccess.value, totalRetry: retryCount.value },
+            )
         }
     }
-}
 
-// ============================ A项目核心：代理请求工厂（同一业务域集中封装）============================
-/**
- * 创建代理请求实例（参考A项目useProxyRequest）
- * 用于同一业务域（如用户模块、商品模块）的接口集中管理
- */
-export function createProxyRequest({ baseURL, defaultOptions }: ProxyRequestConfig) {
-    const proxyInstance = new Request({ baseURL });
+    // 包装取消方法，重置状态
+    const abort = () => {
+        originalAbort()
+        resetRequestState()
+        logHelper(config.enableLog, requestId, '请求取消', '调用abort方法，重置请求状态', { url })
+    }
 
-    // 代理快捷方法（自动拼接baseURL，避免重复写路径）
+    const cancel = () => {
+        originalCancel()
+        resetRequestState()
+        logHelper(config.enableLog, requestId, '请求取消', '调用cancel方法，重置请求状态', { url })
+    }
+
+    // 重置请求状态方法
+    const resetRequestState = () => {
+        const prevRetryCount = retryCount.value
+        const prevFailures = consecutiveFailures.value
+        retryCount.value = 0
+        consecutiveFailures.value = 0
+        isRetryWaiting.value = false
+        if (resetFailureTimer.value) {
+            clearTimeout(resetFailureTimer.value)
+        }
+        // 状态重置日志
+        logHelper(
+            config.enableLog,
+            requestId, // 传入ID
+            '状态重置',
+            '重置请求计数器',
+            { prevRetryCount, prevFailures, url },
+        )
+    }
+
+    // 处理immediate自动请求
+    if (config.immediate) {
+        executeWithRetry().catch(() => {
+            // 自动执行失败时不冒泡错误，避免控制台警告
+            // 外部可通过error和errorMessage获取错误信息
+        })
+    }
+
     return {
-        get: <T = any>(path: string, params?: any, config?: RequestOptions) => {
-            const url = `${baseURL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-            return proxyInstance.get<T>(url, params, { ...defaultOptions, ...config });
-        },
-        post: <T = any>(path: string, data?: any, config?: RequestOptions) => {
-            const url = `${baseURL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-            return proxyInstance.post<T>(url, data, { ...defaultOptions, ...config });
-        },
-        put: <T = any>(path: string, data?: any, config?: RequestOptions) => {
-            const url = `${baseURL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-            return proxyInstance.put<T>(url, data, { ...defaultOptions, ...config });
-        },
-        delete: <T = any>(path: string, data?: any, config?: RequestOptions) => {
-            const url = `${baseURL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
-            return proxyInstance.delete<T>(url, data, { ...defaultOptions, ...config });
-        },
-        instance: proxyInstance // 暴露原始实例，支持更多自定义
-    };
+        // 原始响应数据
+        rawData,
+        // 业务数据
+        data,
+        // 响应对象（包括状态码、信息、数据）
+        response: safeResponse,
+        // 业务状态码
+        code,
+        // 业务信息
+        msg,
+        // 是否请求成功
+        isSuccess,
+        // 错误信息
+        errorMessage,
+        // 加载状态
+        isLoading: isLoadingRetry,
+        isFinished,
+        isAborted,
+        // 错误对象
+        error: requestError,
+        // 执行请求
+        execute: (reqConfig?: AxiosRequestConfig<D>) => executeWithRetry(reqConfig),
+        isReady, // 请求最终就绪（成功或重试耗尽）
+        retryCount, // 当前重试次数
+        // 刷新请求（可更新参数）
+        refresh,
+        // 取消请求
+        abort,
+        cancel,
+    }
 }
 
-// ============================ 默认实例（兼容B项目原有使用方式）============================
-export const request = new Request({ baseURL: '', timeout: 15000 });
-export default request;
+/**
+ * 代理请求的快捷方法
+ */
+export function useProxyRequest<T = any, D = any>(options: Omit<ApiRequestOptions<T, D>, 'url'> & {
+    baseURL?: string
+    path?: string
+}) {
+    const DEFAULT_PROXY_BASE_URL = '/api'
+    const baseURL = options.baseURL || DEFAULT_PROXY_BASE_URL
+    // 确保路径拼接正确，避免出现双斜杠
+    let fullUrl = baseURL
+    if (options.path) {
+        // 处理baseURL结尾的/和path开头的/，避免双斜杠或缺失
+        const baseHasTrailingSlash = baseURL.endsWith('/')
+        const pathHasLeadingSlash = options.path.startsWith('/')
+
+        if (baseHasTrailingSlash && pathHasLeadingSlash) {
+            fullUrl += options.path.slice(1) // 去掉path开头的/
+        }
+        else if (!baseHasTrailingSlash && !pathHasLeadingSlash) {
+            fullUrl += `/${options.path}` // 补一个/
+        }
+        else {
+            fullUrl += options.path // 其他情况直接拼接
+        }
+    }
+
+    // 代理URL日志
+    logHelper(
+        options.enableLog ?? DEFAULT_CONFIG.enableLog,
+        generateRequestId(), // 临时生成一个用于代理日志，实际请求ID在useApiRequest中生成
+        '代理初始化',
+        '代理请求URL拼接完成',
+        { baseURL, path: options.path, finalUrl: fullUrl },
+    )
+
+    // 移除不需要的属性
+    const { baseURL: _, path, ...requestOptions } = options
+    return useApiRequest<T, D>(fullUrl, requestOptions)
+}
+
+/**
+ * 非递归实现的headers深度合并（迭代法）
+ * 优势：避免递归调用栈开销，处理深层嵌套更安全（无栈溢出风险）
+ * @param sources 多个headers对象（最后一个优先级最高）
+ * @returns 合并后的headers对象
+ */
+function deepMergeHeaders<T extends Record<string, any>>(...sources: (T | undefined)[]): T {
+    // 过滤空值源，初始化合并结果
+    const validSources = sources.filter(Boolean) as T[]
+    if (validSources.length === 0) {
+        return {} as T
+    }
+    const result: Record<string, any> = { ...validSources[0] }
+
+    // 从第二个源开始合并（第一个已作为初始结果）
+    for (let i = 1; i < validSources.length; i++) {
+        const currentSource = validSources[i]
+        const stack: [Record<string, any>, Record<string, any>][] = [[result, currentSource]]
+
+        // 用栈模拟递归：每次处理一层对象
+        while (stack.length > 0) {
+            const [target, source] = stack.pop()! // 取出当前层的目标和源对象
+
+            // 遍历当前源对象的所有键
+            for (const key in source) {
+                if (!Object.prototype.hasOwnProperty.call(source, key)) {
+                    continue
+                }
+
+                const targetValue = target[key]
+                const sourceValue = source[key]
+
+                // 判断是否为需要递归合并的对象（非null、非数组、纯对象）
+                const isTargetObject = typeof targetValue === 'object' && targetValue !== null && !Array.isArray(targetValue)
+                const isSourceObject = typeof sourceValue === 'object' && sourceValue !== null && !Array.isArray(sourceValue)
+
+                if (isTargetObject && isSourceObject) {
+                    // 若目标中该键不存在，初始化空对象
+                    if (!targetValue) {
+                        target[key] = {}
+                    }
+                    // 将子对象推入栈，后续处理
+                    stack.push([target[key], sourceValue])
+                }
+                else {
+                    // 非对象值直接覆盖（包括数组、null、基本类型）
+                    target[key] = sourceValue
+                }
+            }
+        }
+    }
+
+    return result as T
+}
+
+/**
+ * 生成简洁易读的请求唯一ID（格式：req-xxxxxxxxx-xxxx）
+ * 特点：短、无混淆字符、视觉清晰
+ */
+function generateRequestId(): string {
+    // 取13位时间戳的后8位（精简时间，保证时效性）
+    const timestamp = Date.now().toString().slice(-8)
+
+    // 4位随机字符（排除 I/O/l/0，避免混淆）
+    const safeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz123456789'
+    let randomStr = ''
+    for (let i = 0; i < 4; i++) {
+        const randomIndex = Math.floor(Math.random() * safeChars.length)
+        randomStr += safeChars[randomIndex]
+    }
+
+    // 组合成最终ID
+    return `req-${timestamp}-${randomStr}`
+}
+
+/**
+ * 日志工具：支持请求唯一ID，关联全链路日志
+ * @param enableLog 是否启用日志
+ * @param requestId 请求唯一ID（贯穿全生命周期）
+ * @param stage 流程阶段（初始化/请求/重试/熔断/结束）
+ * @param message 日志内容
+ * @param data 核心附加数据
+ * @param level 日志级别（info/warn）
+ */
+function logHelper(
+    enableLog: boolean | undefined,
+    requestId: string,
+    stage: string,
+    message: string,
+    data?: Record<string, any>,
+    level: 'info' | 'warn' = 'info',
+) {
+    if (!enableLog) {
+        return
+    }
+    const timestamp = new Date().toLocaleTimeString()
+    // 格式：【阶段】[时间戳] [请求ID] | 内容
+    const prefix = `【${stage}】[${timestamp}] [${requestId}]`
+
+    if (level === 'warn') {
+        console.warn(`${prefix} | ${message}`, data ? '\n关键数据:' : '', data || '')
+    }
+    else {
+        console.info(`${prefix} | ${message}`, data ? '\n关键数据:' : '', data || '')
+    }
+}
